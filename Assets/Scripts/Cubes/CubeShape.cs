@@ -3,96 +3,106 @@ using UnityEngine;
 
 namespace MyGame.Interaction
 {
-    /// <summary>
-    /// Which fixed layout a CubeShape should build.
-    /// Every shape fits inside a single 1×1 board cell.
-    /// </summary>
     public enum CubeShapeType
     {
-        /// <summary>1 whole block filling the cell.</summary>
         Whole,
-
-        /// <summary>2×2 grid of small (quarter-cell) blocks.</summary>
         FourSmall,
-
-        /// <summary>2 half blocks side by side (spanning X).</summary>
         TwoHalf,
-
-
-        /// <summary>1 half block at the bottom + 2 small blocks on top.</summary>
         HalfAndTwoSmall,
     }
 
-    /// <summary>
-    /// Builds a single-cell cube shape from pre-sized sub-cube prefabs.
-    ///
-    /// Conventions:
-    ///  - Shape pivot is at the BOTTOM-CENTER of the cell footprint.
-    ///  - Sub-cube prefabs are authored at their FINAL size (no runtime scaling).
-    ///  - All layout math is in cell units, with (0,0) at the cell's bottom-left
-    ///    and (1,1) at its top-right, then offset by -shapeCenter to center on the pivot.
-    /// </summary>
     public class CubeShape : MonoBehaviour
     {
         #region Inspector Fields
 
         [Header("Sub-Cube Prefabs (authored at final size)")]
-        [Tooltip("Whole cube: 1 × 1 × 1, pivot at bottom-center.")]
         [SerializeField] private GameObject wholeCube;
-
-        [Tooltip("Half cube: 0.5 × 1 × 1 (spans X), pivot at bottom-center.")]
         [SerializeField] private GameObject halfCube;
-
-        [Tooltip("Small cube: 0.5 × 1 × 0.5, pivot at bottom-center.")]
         [SerializeField] private GameObject smallCube;
 
         [Header("Shape")]
-        [Tooltip("Which layout to build. The tray can override this before Start().")]
         [SerializeField] private CubeShapeType shapeType = CubeShapeType.Whole;
-
-        [Tooltip("Rotate the entire layout around Y. 0-3 quarter-turns.")]
         [Range(0, 3)]
         [SerializeField] private int rotationQuarterTurns = 0;
-
-        [Tooltip("Cell size in world units. Set by the tray / DraggableCube at runtime.")]
         [SerializeField] private float cellSize = 1f;
+
+        [Header("Color")]
+        [SerializeField] private CubePalette palette;
+        [SerializeField] private CubeColor shapeColor = CubeColor.White;
+
+        [Tooltip("If true, every sub-cube gets a UNIQUE color from colorPool on each build.")]
+        [SerializeField] private bool randomizePerSlotColor = false;
+
+        [Tooltip("Colors that can be dealt to sub-cubes. Needs at least as many entries as the shape has sub-cubes for strict uniqueness.")]
+        [SerializeField]
+        private CubeColor[] colorPool =
+        {
+            CubeColor.Red,
+            CubeColor.Blue,
+            CubeColor.Green,
+            CubeColor.Yellow,
+            CubeColor.Purple,
+        };
 
         #endregion
 
         #region Runtime State
 
         private readonly List<SubCube> _spawned = new();
+        private readonly Dictionary<SubCube, CubeColor> _blockColors = new();
         private bool _built;
 
         public CubeShapeType ShapeType => shapeType;
         public int RotationQuarterTurns => rotationQuarterTurns;
         public float CellSize => cellSize;
-
-        /// <summary>Footprint in cell units. All shapes fit a single cell.</summary>
         public Vector2 ShapeSize => new Vector2(1f, 1f);
-
-        /// <summary>Footprint in world units.</summary>
         public Vector3 WorldSize => new Vector3(cellSize, cellSize, cellSize);
-
-        /// <summary>Local center offset from the pivot (pivot is at bottom-center).</summary>
         public Vector3 LocalCenter => new Vector3(0f, cellSize * 0.5f, 0f);
-
         public IReadOnlyList<SubCube> Blocks => _spawned;
+        public CubeColor ShapeColor => shapeColor;
+        public CubePalette Palette => palette;
 
-        /// <summary>Fired whenever the shape is rebuilt or a sub-cube is removed.</summary>
         public event System.Action<CubeShape> OnShapeChanged;
 
         #endregion
 
         #region Public API
 
-        /// <summary>Set the cell size used for layout. Call before Build() (or the tray sets it at spawn).</summary>
-        public void SetCellSize(float size)
+        public void SetCellSize(float size) => cellSize = size;
+
+        public void SetPalette(CubePalette p)
         {
-            cellSize = size;
+            palette = p;
+            ApplyColorsToBlocks();
         }
 
-        /// <summary>Swap the shape type and optional rotation, then rebuild immediately.</summary>
+        public void SetColor(CubeColor color)
+        {
+            shapeColor = color;
+            randomizePerSlotColor = false;
+            ApplyColorsToBlocks();
+        }
+
+        public void SetRandomPerSlotColors(CubeColor[] pool)
+        {
+            if (pool != null && pool.Length > 0) colorPool = pool;
+            randomizePerSlotColor = true;
+            Build();   // re-deal unique colors
+        }
+
+        public void SetBlockColor(SubCube block, CubeColor color)
+        {
+            if (block == null) return;
+            _blockColors[block] = color;
+            block.SetColor(color);
+        }
+
+        public CubeColor GetBlockColor(SubCube block)
+        {
+            if (block == null) return shapeColor;
+            return _blockColors.TryGetValue(block, out var c) ? c : shapeColor;
+        }
+
         public void SetShape(CubeShapeType type, int quarterTurns = 0)
         {
             shapeType = type;
@@ -100,7 +110,10 @@ namespace MyGame.Interaction
             Build();
         }
 
-        /// <summary>Instantiate the sub-cube prefabs according to the current shape type.</summary>
+        #endregion
+
+        #region Build / Clear
+
         public void Build()
         {
             Clear();
@@ -112,38 +125,59 @@ namespace MyGame.Interaction
             }
 
             var slots = GetSlots(shapeType, rotationQuarterTurns);
+            Vector2 shapeCenter = ShapeSize * 0.5f;
 
-            // The cell's geometric center is (0.5, 0.5) in cell units.
-            // Pivot is bottom-center → offset each slot's position by -shapeCenter.
-            Vector2 shapeCenter = ShapeSize * 0.5f;   // (0.5, 0.5)
+            // Deal unique colors for the slots that don't have explicit overrides.
+            CubeColor[] dealt = null;
+            if (randomizePerSlotColor)
+            {
+                int freeSlots = 0;
+                foreach (var s in slots) if (!s.overrideColor.HasValue) freeSlots++;
 
+                dealt = DealUniqueColors(freeSlots);
+
+                int distinct = DistinctColorCount();
+                if (freeSlots > distinct)
+                {
+                    Debug.LogWarning(
+                        $"[CubeShape] '{shapeType}' has {freeSlots} sub-cubes but pool has " +
+                        $"{distinct} distinct colors. Repeats will appear.",
+                        this
+                    );
+                }
+            }
+
+            int dealtIndex = 0;
             foreach (var slot in slots)
             {
                 GameObject prefab = PickPrefab(slot.kind);
                 if (prefab == null) continue;
 
                 GameObject go = Instantiate(prefab, transform);
-
-                // Position: horizontal offset from shape center, Y at pivot level (0)
                 go.transform.localPosition = new Vector3(
                     (slot.center.x - shapeCenter.x) * cellSize,
                     0f,
                     (slot.center.y - shapeCenter.y) * cellSize
                 );
-
-                // Yaw: rotate half cubes so a single prefab can span X or Z
                 go.transform.localRotation = Quaternion.Euler(0f, slot.yaw * 90f, 0f);
 
-                // NOTE: no localScale change — prefabs are authored at final size.
-
-                // Optional uniform scale if the board's cell size differs from 1
                 if (!Mathf.Approximately(cellSize, 1f))
                     go.transform.localScale = Vector3.one * cellSize;
 
-                // Wire up sub-cube logic
                 if (go.TryGetComponent(out SubCube sub))
                 {
-                    sub.Initialize(this, slot.center, slot.size);
+                    sub.Initialize(this, slot.center, slot.size, palette);
+
+                    CubeColor finalColor;
+                    if (slot.overrideColor.HasValue)
+                        finalColor = slot.overrideColor.Value;
+                    else if (randomizePerSlotColor && dealt != null)
+                        finalColor = dealt[dealtIndex++];
+                    else
+                        finalColor = shapeColor;
+
+                    sub.SetColor(finalColor);
+                    _blockColors[sub] = finalColor;
                     _spawned.Add(sub);
                 }
                 else
@@ -159,26 +193,88 @@ namespace MyGame.Interaction
             OnShapeChanged?.Invoke(this);
         }
 
-        /// <summary>Destroy all spawned sub-cubes.</summary>
         public void Clear()
         {
-            foreach (var s in _spawned)
-                if (s != null) Destroy(s.gameObject);
+            foreach (var s in _spawned) if (s != null) Destroy(s.gameObject);
             _spawned.Clear();
+            _blockColors.Clear();
 
-            // Catch anything parented but untracked (e.g. editor preview leftovers)
             for (int i = transform.childCount - 1; i >= 0; i--)
                 Destroy(transform.GetChild(i).gameObject);
 
             _built = false;
         }
 
-        /// <summary>Remove a specific sub-cube from the shape (e.g. a bomb that exploded).</summary>
         public void RemoveBlock(SubCube block)
         {
             if (block == null) return;
             _spawned.Remove(block);
+            _blockColors.Remove(block);
             OnShapeChanged?.Invoke(this);
+        }
+
+        #endregion
+
+        #region Color Handling
+
+        private void ApplyColorsToBlocks()
+        {
+            if (randomizePerSlotColor)
+            {
+                // Re-deal unique colors to existing sub-cubes
+                var dealt = DealUniqueColors(_spawned.Count);
+                for (int i = 0; i < _spawned.Count; i++)
+                {
+                    var sub = _spawned[i];
+                    if (sub == null) continue;
+
+                    CubeColor c = _blockColors.TryGetValue(sub, out var existing)
+                        ? existing
+                        : dealt[i];
+
+                    sub.SetColor(c);
+                }
+            }
+            else
+            {
+                foreach (var sub in _spawned)
+                    if (sub != null) sub.SetColor(shapeColor);
+            }
+        }
+
+        /// <summary>
+        /// Deals unique colors from the pool to the given number of slots.
+        /// Shuffles with a Fisher–Yates-style bag; refills when the bag empties.
+        /// </summary>
+        private CubeColor[] DealUniqueColors(int count)
+        {
+            var result = new CubeColor[count];
+            if (count == 0) return result;
+
+            var pool = (colorPool != null && colorPool.Length > 0)
+                ? colorPool
+                : new[] { shapeColor };
+
+            var bag = new List<CubeColor>(pool);
+
+            for (int i = 0; i < count; i++)
+            {
+                if (bag.Count == 0)
+                    bag.AddRange(pool);    // refill on exhaustion
+
+                int pick = Random.Range(0, bag.Count);
+                result[i] = bag[pick];
+                bag.RemoveAt(pick);
+            }
+
+            return result;
+        }
+
+        public int DistinctColorCount()
+        {
+            if (colorPool == null) return 0;
+            var set = new HashSet<CubeColor>(colorPool);
+            return set.Count;
         }
 
         #endregion
@@ -187,15 +283,12 @@ namespace MyGame.Interaction
 
         private void Start()
         {
-            // The tray may have already called SetShape() before we ran.
-            // If not, build from the inspector-authored defaults.
             if (!_built) Build();
         }
 
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            // Live preview while in Play Mode and tweaking the shape in the inspector.
             if (Application.isPlaying && isActiveAndEnabled && _built)
                 Build();
         }
@@ -209,24 +302,23 @@ namespace MyGame.Interaction
 
         private struct Slot
         {
-            public Vector2 center;   // center of the slot, cell units, relative to cell bottom-left
-            public Vector2 size;     // footprint, cell units
+            public Vector2 center;
+            public Vector2 size;
             public BlockKind kind;
-            public int yaw;          // 0..3 quarter-turns around Y (for half cubes)
+            public int yaw;
+            public CubeColor? overrideColor;
 
-            public Slot(float cx, float cy, float sx, float sy, BlockKind kind, int yaw = 0)
+            public Slot(float cx, float cy, float sx, float sy, BlockKind kind,
+                        int yaw = 0, CubeColor? overrideColor = null)
             {
                 center = new Vector2(cx, cy);
                 size = new Vector2(sx, sy);
                 this.kind = kind;
                 this.yaw = yaw;
+                this.overrideColor = overrideColor;
             }
         }
 
-        /// <summary>
-        /// Slot definitions for each shape, in cell units (bottom-left origin, cell spans 0..1).
-        /// Half cubes are authored spanning X; use yaw = 1 to make them span Z.
-        /// </summary>
         private static List<Slot> GetSlots(CubeShapeType type, int quarterTurns)
         {
             List<Slot> slots = type switch
@@ -246,13 +338,12 @@ namespace MyGame.Interaction
 
                 CubeShapeType.TwoHalf => new List<Slot>
                 {
-                    new Slot( 0.5f, 0.25f, 0.5f, 1f, BlockKind.Half),
-                    new Slot( 0.5f, 0.75f, 0.5f, 1f, BlockKind.Half),
+                    new Slot(0.5f, 0.25f, 0.5f, 1f, BlockKind.Half),
+                    new Slot(0.5f, 0.75f, 0.5f, 1f, BlockKind.Half),
                 },
 
                 CubeShapeType.HalfAndTwoSmall => new List<Slot>
                 {
-                    // Bottom half (spans X) + two small cubes on top
                     new Slot(0.5f, 0.25f, 1f, 0.5f, BlockKind.Half),
                     new Slot(0.25f, 0.75f, 0.5f, 0.5f, BlockKind.Small),
                     new Slot(0.75f, 0.75f, 0.5f, 0.5f, BlockKind.Small),
@@ -261,7 +352,6 @@ namespace MyGame.Interaction
                 _ => new List<Slot>()
             };
 
-            // Optional global rotation of the whole layout
             if (quarterTurns != 0)
             {
                 for (int i = 0; i < slots.Count; i++)
@@ -271,7 +361,6 @@ namespace MyGame.Interaction
             return slots;
         }
 
-        /// <summary>Rotate a slot's position and yaw around the cell center (0.5, 0.5).</summary>
         private static Slot RotateSlot(Slot s, int quarterTurns)
         {
             Vector2 c = s.center - new Vector2(0.5f, 0.5f);
@@ -280,12 +369,12 @@ namespace MyGame.Interaction
 
             for (int i = 0; i < quarterTurns; i++)
             {
-                c = new Vector2(c.y, -c.x);       // rotate 90° clockwise
-                sz = new Vector2(sz.y, sz.x);     // swap axes
+                c = new Vector2(c.y, -c.x);
+                sz = new Vector2(sz.y, sz.x);
                 yaw = (yaw + 1) % 4;
             }
 
-            return new Slot(c.x + 0.5f, c.y + 0.5f, sz.x, sz.y, s.kind, yaw);
+            return new Slot(c.x + 0.5f, c.y + 0.5f, sz.x, sz.y, s.kind, yaw, s.overrideColor);
         }
 
         private GameObject PickPrefab(BlockKind kind) => kind switch

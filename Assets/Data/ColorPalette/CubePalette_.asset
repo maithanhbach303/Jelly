@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 0}
+  m_Name: CubePalette_
+  m_EditorClassIdentifier: Assembly-CSharp:MyGame.Interaction:CubePalette
+  entries:
+  - color: 1
+    rgb: {r: 0.95, g: 0.3, b: 0.3, a: 1}
+    material: {fileID: 0}
+    displayName: Red
+  - color: 2
+    rgb: {r: 0.3, g: 0.55, b: 0.95, a: 1}
+    material: {fileID: 0}
+    displayName: Blue
+  - color: 3
+    rgb: {r: 0.4, g: 0.85, b: 0.45, a: 1}
+    material: {fileID: 0}
+    displayName: Green
+  - color: 4
+    rgb: {r: 0.98, g: 0.8, b: 0.25, a: 1}
+    material: {fileID: 0}
+    displayName: Yellow
+  - color: 5
+    rgb: {r: 0.8, g: 0.5, b: 0.95, a: 1}
+    material: {fileID: 0}
+    displayName: Purple
+  - color: 6
+    rgb: {r: 0.98, g: 0.6, b: 0.2, a: 1}
+    material: {fileID: 0}
+    displayName: Orange
+  - color: 7
+    rgb: {r: 0.35, g: 0.9, b: 0.95, a: 1}
+    material: {fileID: 0}
+    displayName: Cyan
+  - color: 8
+    rgb: {r: 0.98, g: 0.55, b: 0.75, a: 1}
+    material: {fileID: 0}
+    displayName: Pink
+  - color: 9
+    rgb: {r: 1, g: 1, b: 1, a: 1}
+    material: {fileID: 0}
+    displayName: White
+  - color: 10
+    rgb: {r: 0.15, g: 0.15, b: 0.15, a: 1}
+    material: {fileID: 0}
+    displayName: Black

@@ -1,26 +1,30 @@
 using System.Collections;
-using System.Collections.Generic;
 using UnityEngine;
 using MyGame.Board;
 using MyGame.Interaction;
 
 namespace MyGame.Tray
 {
-    /// <summary>
-    /// Holds exactly one cube at a time. When the current cube is successfully
-    /// placed on the board, spawns a replacement with a randomly chosen shape.
-    /// If the cube is dropped illegally (snaps back to the tray), nothing changes.
-    /// </summary>
+    public enum TrayColorMode
+    {
+        /// <summary>Every sub-cube in the shape gets the same random color.</summary>
+        Single,
+
+        /// <summary>Each sub-cube gets its own independent random color.</summary>
+        PerSubCube,
+
+        /// <summary>No color override — sub-cubes use whatever their prefab has.</summary>
+        None,
+    }
+
     public class CubeTray : MonoBehaviour
     {
         #region Inspector Fields
 
         [Header("Prefab")]
-        [Tooltip("The cube prefab. Must have a DraggableCube, a CubeShape, and a collider.")]
         [SerializeField] private GameObject cubePrefab;
 
         [Header("Shape Pool")]
-        [Tooltip("Which shapes can be picked. Empty = all four.")]
         [SerializeField]
         private CubeShapeType[] shapePool =
         {
@@ -30,31 +34,37 @@ namespace MyGame.Tray
             CubeShapeType.HalfAndTwoSmall,
         };
 
-        [Tooltip("If true, applies a random 0-3 quarter-turn rotation to each spawned shape.")]
         [SerializeField] private bool randomizeRotation = true;
-
-        [Tooltip("Skip rotation for shapes that are visually symmetric (Whole, FourSmall).")]
         [SerializeField] private bool skipRotationForSymmetricShapes = true;
 
-        [Header("Stock")]
-        [Tooltip("How many cubes the tray will hand out in total. -1 = infinite.")]
-        [SerializeField] private int stockCount = -1;
+        [Header("Color")]
+        [SerializeField] private CubePalette palette;
+        [SerializeField] private TrayColorMode colorMode = TrayColorMode.PerSubCube;
 
-        [Tooltip("Delay (seconds) after a cube is placed before spawning the next one.")]
+        [Tooltip("Which colors can appear. Duplicates = weighting.")]
+        [SerializeField]
+        private CubeColor[] colorPool =
+        {
+            CubeColor.Red,
+            CubeColor.Blue,
+            CubeColor.Green,
+            CubeColor.Yellow,
+            CubeColor.Purple,
+        };
+
+        [Tooltip("If true (Single mode only), avoids giving the same color to two consecutive spawns.")]
+        [SerializeField] private bool avoidConsecutiveRepeats = true;
+
+        [Header("Stock")]
+        [SerializeField] private int stockCount = -1;
         [SerializeField] private float respawnDelay = 0.15f;
 
         [Header("Spawn Area")]
-        [Tooltip("Where the cube's pivot spawns. If null, uses this transform.")]
         [SerializeField] private Transform slot;
-
-        [Tooltip("Extra offset from the slot position.")]
         [SerializeField] private Vector3 spawnOffset = Vector3.zero;
-
-        [Tooltip("Random horizontal jitter (X/Z) added to the spawn point.")]
         [SerializeField] private float spawnJitter = 0f;
 
         [Header("Board Reference")]
-        [Tooltip("Used to read cellSize before spawning. Auto-found if empty.")]
         [SerializeField] private GridManager gridManager;
 
         #endregion
@@ -63,6 +73,7 @@ namespace MyGame.Tray
 
         private GameObject _activeCube;
         private int _remainingStock;
+        private CubeColor _lastColor = CubeColor.None;
 
         public bool HasCube => _activeCube != null;
         public int RemainingStock => stockCount < 0 ? int.MaxValue : _remainingStock;
@@ -83,7 +94,6 @@ namespace MyGame.Tray
 
         #region Public API
 
-        /// <summary>Reset the tray — destroys the current cube and spawns a fresh one.</summary>
         public void ResetTray(int newStockCount = -1)
         {
             StopAllCoroutines();
@@ -101,25 +111,16 @@ namespace MyGame.Tray
             SpawnNext();
         }
 
-        /// <summary>Force a spawn (e.g. for testing). No-op if the tray already holds a cube.</summary>
-        public GameObject ForceSpawn()
-        {
-            if (_activeCube != null) return _activeCube;
-            SpawnNext();
-            return _activeCube;
-        }
-
         #endregion
 
         #region Spawning
 
         private void SpawnNext()
         {
-            if (_activeCube != null) return;      // already holding one
-            if (RemainingStock <= 0) return;      // out of cubes
+            if (_activeCube != null) return;
+            if (RemainingStock <= 0) return;
             if (cubePrefab == null) return;
 
-            // Compute spawn position
             Vector3 basePos = slot != null ? slot.position : transform.position;
             Vector3 jitter = new Vector3(
                 Random.Range(-spawnJitter, spawnJitter),
@@ -128,13 +129,10 @@ namespace MyGame.Tray
             );
             Vector3 spawnPos = basePos + spawnOffset + jitter;
 
-            // Instantiate
             GameObject cube = Instantiate(cubePrefab, spawnPos, Quaternion.identity, transform);
 
-            // Configure the shape BEFORE the cube's Start() runs
-            ConfigureShape(cube);
+            ConfigureCube(cube);
 
-            // Ensure DraggableCube exists and hook the placed event
             if (!cube.TryGetComponent(out DraggableCube draggable))
                 draggable = cube.AddComponent<DraggableCube>();
 
@@ -144,47 +142,72 @@ namespace MyGame.Tray
             if (stockCount >= 0) _remainingStock--;
         }
 
-        private void ConfigureShape(GameObject cube)
+        private void ConfigureCube(GameObject cube)
         {
             var shape = cube.GetComponentInChildren<CubeShape>();
             if (shape == null) return;
 
-            // Set cell size first so any runtime scale math uses the right unit
             float cell = (gridManager != null && gridManager.Board != null)
                 ? gridManager.Board.cellSize
                 : 1f;
             shape.SetCellSize(cell);
+            shape.SetPalette(palette);
 
-            // Pick a shape
             CubeShapeType type = PickRandomShape();
 
-            // Pick a rotation
             int rotation = 0;
             if (randomizeRotation)
-            {
                 if (!skipRotationForSymmetricShapes || IsRotationallyDistinct(type))
                     rotation = Random.Range(0, 4);
-            }
 
-            // SetShape rebuilds synchronously; the cube's Start() will see _built == true
+            // 1. Build shape first (sub-cubes created with placeholder colors)
             shape.SetShape(type, rotation);
+
+            // 2. Apply color strategy
+            switch (colorMode)
+            {
+                case TrayColorMode.Single:
+                    shape.SetColor(PickSingleColor());
+                    break;
+
+                case TrayColorMode.PerSubCube:
+                    shape.SetRandomPerSlotColors(colorPool);
+                    break;
+
+                case TrayColorMode.None:
+                default:
+                    // Leave whatever color the prefab / inspector had
+                    break;
+            }
         }
 
         private CubeShapeType PickRandomShape()
         {
-            if (shapePool == null || shapePool.Length == 0)
-            {
-                // Fallback: any of the four
-                var all = System.Enum.GetValues(typeof(CubeShapeType)) as CubeShapeType[];
-                return all[Random.Range(0, all.Length)];
-            }
-
+            if (shapePool == null || shapePool.Length == 0) return CubeShapeType.Whole;
             return shapePool[Random.Range(0, shapePool.Length)];
+        }
+
+        private CubeColor PickSingleColor()
+        {
+            if (colorPool == null || colorPool.Length == 0) return CubeColor.None;
+
+            if (!avoidConsecutiveRepeats || colorPool.Length == 1)
+                return colorPool[Random.Range(0, colorPool.Length)];
+
+            CubeColor picked;
+            int guard = 0;
+            do
+            {
+                picked = colorPool[Random.Range(0, colorPool.Length)];
+                guard++;
+            } while (picked == _lastColor && guard < 16);
+
+            _lastColor = picked;
+            return picked;
         }
 
         private static bool IsRotationallyDistinct(CubeShapeType type)
         {
-            // Whole and FourSmall look the same at any 90° rotation
             return type switch
             {
                 CubeShapeType.Whole => false,
@@ -197,11 +220,9 @@ namespace MyGame.Tray
         {
             if (cube == null || cube.gameObject != _activeCube) return;
 
-            // Unsubscribe from the placed cube
             cube.OnPlacedOnBoard -= HandleCubePlaced;
             _activeCube = null;
 
-            // Respawn with a small delay so the placement feels settled
             if (respawnDelay > 0f)
                 StartCoroutine(RespawnAfterDelay());
             else
