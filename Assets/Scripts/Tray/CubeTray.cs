@@ -7,13 +7,8 @@ namespace MyGame.Tray
 {
     public enum TrayColorMode
     {
-        /// <summary>Every sub-cube in the shape gets the same random color.</summary>
         Single,
-
-        /// <summary>Each sub-cube gets its own independent random color.</summary>
         PerSubCube,
-
-        /// <summary>No color override — sub-cubes use whatever their prefab has.</summary>
         None,
     }
 
@@ -25,23 +20,13 @@ namespace MyGame.Tray
         [SerializeField] private GameObject cubePrefab;
 
         [Header("Shape Pool")]
-        [SerializeField]
-        private CubeShapeType[] shapePool =
-        {
-            CubeShapeType.Whole,
-            CubeShapeType.FourSmall,
-            CubeShapeType.TwoHalf,
-            CubeShapeType.HalfAndTwoSmall,
-        };
-
-        [SerializeField] private bool randomizeRotation = true;
-        [SerializeField] private bool skipRotationForSymmetricShapes = true;
+        [Tooltip("Data asset describing which shapes can spawn and how often.")]
+        [SerializeField] private CubeShapeDefinition shapeDefinition;
 
         [Header("Color")]
         [SerializeField] private CubePalette palette;
         [SerializeField] private TrayColorMode colorMode = TrayColorMode.PerSubCube;
 
-        [Tooltip("Which colors can appear. Duplicates = weighting.")]
         [SerializeField]
         private CubeColor[] colorPool =
         {
@@ -52,8 +37,7 @@ namespace MyGame.Tray
             CubeColor.Purple,
         };
 
-        [Tooltip("If true (Single mode only), avoids giving the same color to two consecutive spawns.")]
-        [SerializeField] private bool avoidConsecutiveRepeats = true;
+        [SerializeField] private bool avoidConsecutiveColorRepeats = true;
 
         [Header("Stock")]
         [SerializeField] private int stockCount = -1;
@@ -85,7 +69,6 @@ namespace MyGame.Tray
         private void Start()
         {
             if (gridManager == null) gridManager = FindFirstObjectByType<GridManager>();
-
             _remainingStock = stockCount < 0 ? int.MaxValue : stockCount;
             SpawnNext();
         }
@@ -105,6 +88,8 @@ namespace MyGame.Tray
                 Destroy(_activeCube);
                 _activeCube = null;
             }
+
+            shapeDefinition?.ResetPicker();
 
             stockCount = newStockCount;
             _remainingStock = stockCount < 0 ? int.MaxValue : stockCount;
@@ -153,17 +138,25 @@ namespace MyGame.Tray
             shape.SetCellSize(cell);
             shape.SetPalette(palette);
 
-            CubeShapeType type = PickRandomShape();
+            // --- Pick a shape via the ScriptableObject ---
+            CubeShapeType type;
+            int rotation;
 
-            int rotation = 0;
-            if (randomizeRotation)
-                if (!skipRotationForSymmetricShapes || IsRotationallyDistinct(type))
-                    rotation = Random.Range(0, 4);
+            if (shapeDefinition != null && shapeDefinition.TryPick(out type, out rotation, out _))
+            {
+                // Picked from data
+            }
+            else
+            {
+                // Fallback if no definition assigned
+                type = CubeShapeType.Whole;
+                rotation = 0;
+            }
 
-            // 1. Build shape first (sub-cubes created with placeholder colors)
+            // Apply shape
             shape.SetShape(type, rotation);
 
-            // 2. Apply color strategy
+            // Apply color mode
             switch (colorMode)
             {
                 case TrayColorMode.Single:
@@ -176,22 +169,15 @@ namespace MyGame.Tray
 
                 case TrayColorMode.None:
                 default:
-                    // Leave whatever color the prefab / inspector had
                     break;
             }
-        }
-
-        private CubeShapeType PickRandomShape()
-        {
-            if (shapePool == null || shapePool.Length == 0) return CubeShapeType.Whole;
-            return shapePool[Random.Range(0, shapePool.Length)];
         }
 
         private CubeColor PickSingleColor()
         {
             if (colorPool == null || colorPool.Length == 0) return CubeColor.None;
 
-            if (!avoidConsecutiveRepeats || colorPool.Length == 1)
+            if (!avoidConsecutiveColorRepeats || colorPool.Length == 1)
                 return colorPool[Random.Range(0, colorPool.Length)];
 
             CubeColor picked;
@@ -204,16 +190,6 @@ namespace MyGame.Tray
 
             _lastColor = picked;
             return picked;
-        }
-
-        private static bool IsRotationallyDistinct(CubeShapeType type)
-        {
-            return type switch
-            {
-                CubeShapeType.Whole => false,
-                CubeShapeType.FourSmall => false,
-                _ => true,
-            };
         }
 
         private void HandleCubePlaced(DraggableCube cube)
