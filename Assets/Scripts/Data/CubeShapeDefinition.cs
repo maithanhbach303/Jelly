@@ -58,10 +58,6 @@ namespace MyGame.Interaction
         [Tooltip("If true, the picker avoids picking the same shape twice in a row.")]
         [SerializeField] private bool avoidImmediateRepeat = true;
 
-        [Tooltip("If true, weights are treated as percentages of the total (auto-normalized). " +
-                 "If false, weights are raw relative values — same effect.")]
-        [SerializeField] private bool autoNormalize = true;
-
         // -------- Runtime caches --------
         [NonSerialized] private int _lastPickedIndex = -1;
 

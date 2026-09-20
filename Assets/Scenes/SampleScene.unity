@@ -830,6 +830,39 @@ Transform:
   m_CorrespondingSourceObject: {fileID: 2469500399791133278, guid: 4356090a05d9268409baa8bca4530b4b, type: 3}
   m_PrefabInstance: {fileID: 630898451}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1478598920
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1478598921}
+  m_Layer: 0
+  m_Name: Tray
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1478598921
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1478598920}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: -3}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children:
+  - {fileID: 1838239462}
+  - {fileID: 1548269751}
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1548269749
 GameObject:
   m_ObjectHideFlags: 0
@@ -841,7 +874,7 @@ GameObject:
   - component: {fileID: 1548269751}
   - component: {fileID: 1548269750}
   m_Layer: 0
-  m_Name: Tray
+  m_Name: Tray (2)
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -860,18 +893,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cubePrefab: {fileID: 2723131392848585598, guid: 6446225d2ad203a479ecb894b96143ee, type: 3}
-  shapePool: 00000000010000000200000003000000
-  randomizeRotation: 1
-  skipRotationForSymmetricShapes: 1
-  palette: {fileID: 11400000, guid: 6d644a27a4305184580fc4cb77320a84, type: 2}
-  colorPool: 0100000002000000030000000400000005000000
-  randomizeColor: 1
-  avoidConsecutiveRepeats: 1
+  shapeDefinition: {fileID: 11400000, guid: 6ae75ff0b80805c499173814dcd4b9b6, type: 2}
+  palette: {fileID: 11400000, guid: eb041950c6d3df5498f6150d6d4985ae, type: 2}
+  colorMode: 1
+  avoidConsecutiveColorRepeats: 1
   stockCount: -1
   respawnDelay: 0.15
-  slot: {fileID: 0}
-  spawnOffset: {x: 0, y: 0, z: 0}
-  spawnJitter: 0
   gridManager: {fileID: 558107563}
 --- !u!4 &1548269751
 Transform:
@@ -881,14 +908,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1548269749}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: -1, y: 0, z: -3}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: -1, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 615913112}
   - {fileID: 1990920406}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1478598921}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1622967088
 GameObject:
@@ -952,18 +979,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cubePrefab: {fileID: 2723131392848585598, guid: 6446225d2ad203a479ecb894b96143ee, type: 3}
-  shapePool: 00000000010000000200000003000000
-  randomizeRotation: 1
-  skipRotationForSymmetricShapes: 1
-  palette: {fileID: 0}
-  colorPool: 0100000002000000030000000400000005000000
-  randomizeColor: 1
-  avoidConsecutiveRepeats: 1
+  shapeDefinition: {fileID: 11400000, guid: 6ae75ff0b80805c499173814dcd4b9b6, type: 2}
+  palette: {fileID: 11400000, guid: eb041950c6d3df5498f6150d6d4985ae, type: 2}
+  colorMode: 1
+  avoidConsecutiveColorRepeats: 1
   stockCount: -1
   respawnDelay: 0.15
-  slot: {fileID: 0}
-  spawnOffset: {x: 0, y: 0, z: 0}
-  spawnJitter: 0
   gridManager: {fileID: 558107563}
 --- !u!4 &1838239462
 Transform:
@@ -973,14 +994,14 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1838239460}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 1, y: 0, z: -3}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
+  m_LocalPosition: {x: 1, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 1622967089}
   - {fileID: 127341567}
-  m_Father: {fileID: 0}
+  m_Father: {fileID: 1478598921}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1990920405
 GameObject:
@@ -1021,6 +1042,5 @@ SceneRoots:
   - {fileID: 410087041}
   - {fileID: 832575519}
   - {fileID: 558107564}
-  - {fileID: 1548269751}
-  - {fileID: 1838239462}
+  - {fileID: 1478598921}
   - {fileID: 27162291}

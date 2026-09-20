@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 using MyGame.Board;
 using MyGame.Interaction;
@@ -7,8 +8,13 @@ namespace MyGame.Tray
 {
     public enum TrayColorMode
     {
+        /// <summary>Every sub-cube in the shape gets the same color.</summary>
         Single,
+
+        /// <summary>Each sub-cube gets its own color (unique within the shape).</summary>
         PerSubCube,
+
+        /// <summary>No color override — sub-cubes use whatever their prefab has.</summary>
         None,
     }
 
@@ -24,31 +30,24 @@ namespace MyGame.Tray
         [SerializeField] private CubeShapeDefinition shapeDefinition;
 
         [Header("Color")]
+        [Tooltip("Palette asset. Both the sub-cube colors and the color pool are read from here.")]
         [SerializeField] private CubePalette palette;
+
+        [Tooltip("How colors are applied to the shape's sub-cubes.")]
         [SerializeField] private TrayColorMode colorMode = TrayColorMode.PerSubCube;
 
-        [SerializeField]
-        private CubeColor[] colorPool =
-        {
-            CubeColor.Red,
-            CubeColor.Blue,
-            CubeColor.Green,
-            CubeColor.Yellow,
-            CubeColor.Purple,
-        };
-
+        [Tooltip("If true, avoids giving consecutive spawns the same single-color in Single mode.")]
         [SerializeField] private bool avoidConsecutiveColorRepeats = true;
 
         [Header("Stock")]
+        [Tooltip("How many cubes this tray hands out in total. -1 = infinite.")]
         [SerializeField] private int stockCount = -1;
+
+        [Tooltip("Delay (seconds) after a cube is placed before spawning the next one.")]
         [SerializeField] private float respawnDelay = 0.15f;
 
-        [Header("Spawn Area")]
-        [SerializeField] private Transform slot;
-        [SerializeField] private Vector3 spawnOffset = Vector3.zero;
-        [SerializeField] private float spawnJitter = 0f;
-
         [Header("Board Reference")]
+        [Tooltip("Used to read cellSize before spawning. Auto-found if empty.")]
         [SerializeField] private GridManager gridManager;
 
         #endregion
@@ -58,6 +57,9 @@ namespace MyGame.Tray
         private GameObject _activeCube;
         private int _remainingStock;
         private CubeColor _lastColor = CubeColor.None;
+
+        // Cached color list built from the palette — rebuilt if the palette changes.
+        private readonly List<CubeColor> _colorPool = new();
 
         public bool HasCube => _activeCube != null;
         public int RemainingStock => stockCount < 0 ? int.MaxValue : _remainingStock;
@@ -69,6 +71,9 @@ namespace MyGame.Tray
         private void Start()
         {
             if (gridManager == null) gridManager = FindFirstObjectByType<GridManager>();
+
+            RefreshColorPoolFromPalette();
+
             _remainingStock = stockCount < 0 ? int.MaxValue : stockCount;
             SpawnNext();
         }
@@ -90,10 +95,18 @@ namespace MyGame.Tray
             }
 
             shapeDefinition?.ResetPicker();
+            RefreshColorPoolFromPalette();
 
             stockCount = newStockCount;
             _remainingStock = stockCount < 0 ? int.MaxValue : stockCount;
             SpawnNext();
+        }
+
+        /// <summary>Swap palette at runtime and rebuild the color pool.</summary>
+        public void SetPalette(CubePalette newPalette)
+        {
+            palette = newPalette;
+            RefreshColorPoolFromPalette();
         }
 
         #endregion
@@ -106,13 +119,8 @@ namespace MyGame.Tray
             if (RemainingStock <= 0) return;
             if (cubePrefab == null) return;
 
-            Vector3 basePos = slot != null ? slot.position : transform.position;
-            Vector3 jitter = new Vector3(
-                Random.Range(-spawnJitter, spawnJitter),
-                0f,
-                Random.Range(-spawnJitter, spawnJitter)
-            );
-            Vector3 spawnPos = basePos + spawnOffset + jitter;
+            // The tray's own transform is the spawn point.
+            Vector3 spawnPos = transform.position;
 
             GameObject cube = Instantiate(cubePrefab, spawnPos, Quaternion.identity, transform);
 
@@ -132,31 +140,30 @@ namespace MyGame.Tray
             var shape = cube.GetComponentInChildren<CubeShape>();
             if (shape == null) return;
 
+            // Cell size
             float cell = (gridManager != null && gridManager.Board != null)
                 ? gridManager.Board.cellSize
                 : 1f;
             shape.SetCellSize(cell);
             shape.SetPalette(palette);
 
-            // --- Pick a shape via the ScriptableObject ---
+            // Shape
             CubeShapeType type;
             int rotation;
 
             if (shapeDefinition != null && shapeDefinition.TryPick(out type, out rotation, out _))
             {
-                // Picked from data
+                // picked from data
             }
             else
             {
-                // Fallback if no definition assigned
                 type = CubeShapeType.Whole;
                 rotation = 0;
             }
 
-            // Apply shape
             shape.SetShape(type, rotation);
 
-            // Apply color mode
+            // Color
             switch (colorMode)
             {
                 case TrayColorMode.Single:
@@ -164,7 +171,7 @@ namespace MyGame.Tray
                     break;
 
                 case TrayColorMode.PerSubCube:
-                    shape.SetRandomPerSlotColors(colorPool);
+                    shape.SetRandomPerSlotColors(_colorPool.ToArray());
                     break;
 
                 case TrayColorMode.None:
@@ -173,24 +180,47 @@ namespace MyGame.Tray
             }
         }
 
+        #endregion
+
+        #region Color
+
+        /// <summary>Populate the internal pool from the palette's entries.</summary>
+        private void RefreshColorPoolFromPalette()
+        {
+            _colorPool.Clear();
+
+            if (palette == null) return;
+
+            foreach (var entry in palette.Entries)
+            {
+                // Skip None — it's a placeholder, not a spawnable color
+                if (entry.color == CubeColor.None) continue;
+                _colorPool.Add(entry.color);
+            }
+        }
+
         private CubeColor PickSingleColor()
         {
-            if (colorPool == null || colorPool.Length == 0) return CubeColor.None;
+            if (_colorPool.Count == 0) return CubeColor.None;
 
-            if (!avoidConsecutiveColorRepeats || colorPool.Length == 1)
-                return colorPool[Random.Range(0, colorPool.Length)];
+            if (!avoidConsecutiveColorRepeats || _colorPool.Count == 1)
+                return _colorPool[Random.Range(0, _colorPool.Count)];
 
             CubeColor picked;
             int guard = 0;
             do
             {
-                picked = colorPool[Random.Range(0, colorPool.Length)];
+                picked = _colorPool[Random.Range(0, _colorPool.Count)];
                 guard++;
             } while (picked == _lastColor && guard < 16);
 
             _lastColor = picked;
             return picked;
         }
+
+        #endregion
+
+        #region Placement
 
         private void HandleCubePlaced(DraggableCube cube)
         {
