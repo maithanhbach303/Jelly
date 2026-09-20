@@ -11,7 +11,7 @@ GameObject:
   - component: {fileID: 3442709526706423715}
   - component: {fileID: 7506412446369102485}
   - component: {fileID: 8325096894594622409}
-  m_Layer: 6
+  m_Layer: 7
   m_Name: Visual
   m_TagString: Untagged
   m_Icon: {fileID: 0}
@@ -27,8 +27,8 @@ Transform:
   m_GameObject: {fileID: 44364921741866005}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: 0.215, z: 0}
-  m_LocalScale: {x: 0.86, y: 0.43, z: 0.83}
+  m_LocalPosition: {x: 0, y: 0.3, z: 0}
+  m_LocalScale: {x: 0.42, y: 0.6, z: 0.42}
   m_ConstrainProportionsScale: 0
   m_Children: []
   m_Father: {fileID: 5594739365991342082}
@@ -49,7 +49,7 @@ MeshRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 44364921741866005}
   m_Enabled: 1
-  m_CastShadows: 0
+  m_CastShadows: 1
   m_ReceiveShadows: 1
   m_DynamicOccludee: 1
   m_StaticShadowCaster: 0
@@ -97,9 +97,9 @@ GameObject:
   - component: {fileID: 5594739365991342082}
   - component: {fileID: 257847358308574470}
   - component: {fileID: 1081491698692068842}
-  - component: {fileID: 8345877473968697713}
-  m_Layer: 6
-  m_Name: Cube
+  - component: {fileID: -5976124163314569392}
+  m_Layer: 7
+  m_Name: Small Cube
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -140,8 +140,8 @@ BoxCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 3
-  m_Size: {x: 0.86, y: 0.43, z: 0.86}
-  m_Center: {x: 0, y: 0.215, z: 0}
+  m_Size: {x: 0.42, y: 0.6, z: 0.42}
+  m_Center: {x: 0, y: 0.3, z: 0}
 --- !u!54 &1081491698692068842
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -169,7 +169,7 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
---- !u!114 &8345877473968697713
+--- !u!114 &-5976124163314569392
 MonoBehaviour:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
@@ -178,15 +178,8 @@ MonoBehaviour:
   m_GameObject: {fileID: 3522785088484918257}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 9c75e21deec15e3419e049f067f636c2, type: 3}
+  m_Script: {fileID: 11500000, guid: 4e295ae18582ec948ab2c0fd2af69412, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  liftHeight: 0.5
-  dragSmoothTime: 0.06
-  snapSmoothTime: 0.1
-  placedFitRatio: 1
-  landingPulseDuration: 0.18
-  landingSquash: 0.25
-  ghostPrefab: {fileID: 0}
-  validTint: {r: 0.3, g: 1, b: 0.4, a: 0.45}
-  invalidTint: {r: 1, g: 0.3, b: 0.3, a: 0.45}
+  SlotPosition: {x: 0, y: 0}
+  SlotSize: {x: 0, y: 0}

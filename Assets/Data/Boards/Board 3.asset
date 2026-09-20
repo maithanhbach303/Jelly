@@ -14,19 +14,17 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   boardName: New Board
   description: 
-  shape: '1111111
+  shape: '00100
 
-    1010101
+    01110
 
-    1111111
+    11111
 
-    1010101
+    01110
 
-    1111111
-
-'
+    00100'
+  plane: 0
   cellSize: 1
   originPosition: {x: -2, y: 0, z: -1}
   validCellColor: {r: 0.85, g: 0.85, b: 0.85, a: 1}
   holeColor: {r: 0.2, g: 0.2, b: 0.2, a: 0.3}
-  plane: 0
