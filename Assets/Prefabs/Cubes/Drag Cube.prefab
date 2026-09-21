@@ -96,15 +96,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9c75e21deec15e3419e049f067f636c2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  shape: {fileID: 0}
   liftHeight: 0.5
   dragSmoothTime: 0.06
   snapSmoothTime: 0.1
-  placedFitRatio: 0.9
-  landingPulseDuration: 0.18
-  landingSquash: 0.25
   ghostPrefab: {fileID: 0}
   validTint: {r: 0.3, g: 1, b: 0.4, a: 0.45}
   invalidTint: {r: 1, g: 0.3, b: 0.3, a: 0.45}
+  matchResolver: {fileID: 0}
 --- !u!114 &-8390181135907925615
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -123,6 +122,8 @@ MonoBehaviour:
   shapeType: 0
   rotationQuarterTurns: 3
   cellSize: 1
+  palette: {fileID: 0}
+  defaultColor: 1
 --- !u!1 &4049257599123577326
 GameObject:
   m_ObjectHideFlags: 0

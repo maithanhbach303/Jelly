@@ -3,25 +3,18 @@ using UnityEngine.InputSystem;
 
 namespace MyGame.Interaction
 {
-    /// <summary>
-    /// Centralized player input for drag-and-drop. Owns the Input System wiring,
-    /// does 3D raycasting, and delegates to IDraggable objects.
-    /// Nothing else in the game should read pointer input directly.
-    /// </summary>
     public class DragController : MonoBehaviour
     {
         [Header("Input")]
-        [SerializeField] private GameplayInput input;   // auto-generated wrapper
-        [SerializeField] private Camera rayCamera;      // assign Main Camera
+        [SerializeField] private GameplayInput input;
+        [SerializeField] private Camera rayCamera;
 
         [Header("Raycast")]
-        [SerializeField] private LayerMask draggableMask;   // layer of draggable cubes
-        [SerializeField] private LayerMask groundMask;      // layer of the ground plane
+        [SerializeField] private LayerMask draggableMask;
+        [SerializeField] private LayerMask groundMask;
         [SerializeField] private float maxRayDistance = 200f;
 
         private IDraggable _active;
-
-        // ---------- Lifecycle ----------
 
         private void Awake()
         {
@@ -43,16 +36,14 @@ namespace MyGame.Interaction
             input.Gameplay.Disable();
         }
 
-        // ---------- Input callbacks ----------
-
         private void OnPressStarted(InputAction.CallbackContext _)
         {
             Vector2 screen = input.Gameplay.Point.ReadValue<Vector2>();
             Ray ray = rayCamera.ScreenPointToRay(screen);
 
-            if (Physics.Raycast(ray, out RaycastHit hit, maxRayDistance, draggableMask))
+            if (Physics.Raycast(ray, out var hit, maxRayDistance, draggableMask))
             {
-                if (hit.collider.TryGetComponent(out IDraggable draggable))
+                if (hit.collider.TryGetComponent(out IDraggable draggable) && draggable.CanDrag)
                 {
                     _active = draggable;
                     _active.OnPickup(hit.point);
@@ -67,8 +58,6 @@ namespace MyGame.Interaction
             _active = null;
         }
 
-        // ---------- Continuous drag ----------
-
         private void Update()
         {
             if (_active == null) return;
@@ -76,11 +65,8 @@ namespace MyGame.Interaction
             Vector2 screen = input.Gameplay.Point.ReadValue<Vector2>();
             Ray ray = rayCamera.ScreenPointToRay(screen);
 
-            // Raycast against ground plane to find where the pointer is in world space
-            if (Physics.Raycast(ray, out RaycastHit hit, maxRayDistance, groundMask))
-            {
+            if (Physics.Raycast(ray, out var hit, maxRayDistance, groundMask))
                 _active.OnDrag(hit.point);
-            }
         }
     }
 }
