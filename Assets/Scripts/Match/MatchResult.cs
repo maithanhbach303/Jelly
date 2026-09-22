@@ -7,16 +7,16 @@ namespace MyGame.Match
     {
         public CubeColor Color { get; }
         public IReadOnlyList<SubCube> Blocks { get; }
+        public int Count => Blocks.Count;
         public bool IsHorizontal { get; }
         public bool IsVertical { get; }
-        public int Count => Blocks.Count;
 
-        public MatchResult(CubeColor color, List<SubCube> blocks, bool horizontal, bool vertical)
+        public MatchResult(CubeColor color, List<SubCube> blocks, bool isHorizontal, bool isVertical)
         {
             Color = color;
             Blocks = blocks;
-            IsHorizontal = horizontal;
-            IsVertical = vertical;
+            IsHorizontal = isHorizontal;
+            IsVertical = isVertical;
         }
 
         public override string ToString()

@@ -932,7 +932,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cubePrefab: {fileID: 2723131392848585598, guid: 6446225d2ad203a479ecb894b96143ee, type: 3}
-  shapeDefinition: {fileID: 11400000, guid: 53a0e698d25b3984e9b495ee3c7b24e0, type: 2}
+  shapeDefinition: {fileID: 11400000, guid: 6ae75ff0b80805c499173814dcd4b9b6, type: 2}
   palette: {fileID: 11400000, guid: 63fc5a67784b6434a88113e5e1fca544, type: 2}
   stockCount: -1
   respawnDelay: 0.15
@@ -1016,7 +1016,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   cubePrefab: {fileID: 2723131392848585598, guid: 6446225d2ad203a479ecb894b96143ee, type: 3}
-  shapeDefinition: {fileID: 11400000, guid: 53a0e698d25b3984e9b495ee3c7b24e0, type: 2}
+  shapeDefinition: {fileID: 11400000, guid: 6ae75ff0b80805c499173814dcd4b9b6, type: 2}
   palette: {fileID: 11400000, guid: 63fc5a67784b6434a88113e5e1fca544, type: 2}
   stockCount: -1
   respawnDelay: 0.15
@@ -1038,6 +1038,53 @@ Transform:
   - {fileID: 127341567}
   m_Father: {fileID: 1478598921}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!1 &1852706009
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1852706010}
+  - component: {fileID: 1852706011}
+  m_Layer: 0
+  m_Name: MatchManager
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1852706010
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1852706009}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -2.5833013, y: 1.4720197, z: -3.729937}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1852706011
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1852706009}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0e422c15796661b4ab76f95bbd122c9f, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  grid: {fileID: 558107563}
+  minMatchSize: 2
+  autoResolve: 1
 --- !u!1 &1990920405
 GameObject:
   m_ObjectHideFlags: 0
@@ -1080,3 +1127,4 @@ SceneRoots:
   - {fileID: 1478598921}
   - {fileID: 27162291}
   - {fileID: 998027475}
+  - {fileID: 1852706010}
