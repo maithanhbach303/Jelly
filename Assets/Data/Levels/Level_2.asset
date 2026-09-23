@@ -24,5 +24,40 @@ MonoBehaviour:
   respawnDelay: 0.15
   goals:
   - {fileID: 11400000, guid: ac5a2fda5de2fa74dabbdcf9487b6a22, type: 2}
-  prefill: []
-  traySequence: {fileID: 0}
+  prefill:
+  - cell: {x: 0, y: 0}
+    shapeType: 0
+    rotationQuarterTurns: 0
+    colors: 08000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 1, y: 0}
+    shapeType: 0
+    rotationQuarterTurns: 0
+    colors: 05000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 2, y: 0}
+    shapeType: 2
+    rotationQuarterTurns: 0
+    colors: 0700000008000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 0, y: 1}
+    shapeType: 2
+    rotationQuarterTurns: 1
+    colors: 0300000007000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 1, y: 1}
+    shapeType: 0
+    rotationQuarterTurns: 0
+    colors: 03000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 2, y: 1}
+    shapeType: 0
+    rotationQuarterTurns: 0
+    colors: 04000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 1, y: 2}
+    shapeType: 2
+    rotationQuarterTurns: 1
+    colors: 0500000008000000
+    paletteOverride: {fileID: 0}
+  traySequence: {fileID: 11400000, guid: 3946b32b7b6f3244399becef244fb8ae, type: 2}

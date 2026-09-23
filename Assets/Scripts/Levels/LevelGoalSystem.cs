@@ -51,6 +51,13 @@ namespace MyGame.Levels
             CheckAllComplete();
         }
 
+        /// <summary>Dispose every tracker and reset the system. Used by LevelLoader.RemoveAll.</summary>
+        public void ClearGoals()
+        {
+            DisposeTrackers();
+            _completedCount = 0;
+        }
+
         private void DisposeTrackers()
         {
             for (int i = 0; i < _trackers.Count; i++)

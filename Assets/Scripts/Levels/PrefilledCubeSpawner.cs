@@ -63,14 +63,18 @@ namespace MyGame.Levels
                 return null;
             }
 
+            // Rotation from the entry
+            Quaternion rotation = Quaternion.Euler(0f, entry.rotationQuarterTurns * 90f, 0f);
+
             Vector3 worldPos = gridManager.GetWorldPosition(entry.cell);
-            GameObject cube = Instantiate(cubePrefab, worldPos, Quaternion.identity, gridManager.transform);
+            GameObject cube = Instantiate(cubePrefab, worldPos, rotation, gridManager.transform);
             _spawned.Add(cube);
 
             if (!cube.TryGetComponent(out DraggableCube draggable))
                 draggable = cube.AddComponent<DraggableCube>();
 
             draggable.IsPrefilled = true;
+            draggable.SetYawQuarterTurns(entry.rotationQuarterTurns);
 
             var shape = cube.GetComponentInChildren<CubeShape>();
             if (shape == null)
@@ -105,7 +109,7 @@ namespace MyGame.Levels
 
             if (logSpawns)
                 Debug.Log($"[PrefilledCubeSpawner] Spawned {entry.shapeType} at {entry.cell} " +
-                          $"({shape.Blocks.Count} sub-cubes).", cube);
+                          $"(yaw={entry.rotationQuarterTurns * 90f}°, {shape.Blocks.Count} sub-cubes).", cube);
 
             return cube;
         }

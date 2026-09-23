@@ -29,14 +29,10 @@ namespace MyGame.Match
 
         #region Lifecycle
 
-        private void Awake()
-        {
-            EnsureInitialized();
-        }
+        private void Awake() => EnsureInitialized();
 
         private void OnEnable()
         {
-            // Ensure is safe to call multiple times.
             EnsureInitialized();
 
             if (grid != null)
@@ -53,13 +49,9 @@ namespace MyGame.Match
                 grid.OnCubePlaced -= HandleCubePlaced;
                 grid.OnCubeRemoved -= HandleCubeRemoved;
             }
-            UnsubscribeAll();
+            ClearAllSubscriptions();
         }
 
-        /// <summary>
-        /// Lazily initializes internal state. Safe to call from anywhere, any number of times.
-        /// Needed because LevelLoader runs before this component's Awake (DefaultExecutionOrder).
-        /// </summary>
         public void EnsureInitialized()
         {
             if (_initialized) return;
@@ -115,7 +107,8 @@ namespace MyGame.Match
             }
         }
 
-        private void UnsubscribeAll()
+        /// <summary>Unhook every cube currently tracked. Safe to call anytime.</summary>
+        public void ClearAllSubscriptions()
         {
             foreach (var cube in _subscribed)
             {
@@ -136,11 +129,7 @@ namespace MyGame.Match
 
             EnsureInitialized();
 
-            if (grid == null)
-            {
-                Debug.LogWarning("[MatchManager] grid is null in HandleCubeFullyPlaced.");
-                return;
-            }
+            if (grid == null) return;
 
             var initial = _detector.FindMatches(grid, minMatchSize);
             if (initial.Count == 0) return;
@@ -170,7 +159,6 @@ namespace MyGame.Match
 
             if (grid == null)
             {
-                Debug.LogWarning("[MatchManager] ResolveNowAsync called with no grid.");
                 onComplete?.Invoke(0);
                 yield break;
             }

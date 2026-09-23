@@ -18,9 +18,41 @@ MonoBehaviour:
   difficulty: 1
   board: {fileID: 11400000, guid: dbe6fce20ae1a3645a4828f18dbf3e61, type: 2}
   shapePool: {fileID: 11400000, guid: db598730f70c52141b090c809831e76c, type: 2}
-  palette: {fileID: 11400000, guid: cfbb11c25a35db541b73fcd370c1d47c, type: 2}
+  palette: {fileID: 11400000, guid: ef44d49f210a6f643b7f40dd1e332ac7, type: 2}
   minMatchSize: 2
   stockCount: -1
   respawnDelay: 0.15
   goals:
   - {fileID: 11400000, guid: 76422ad2b1da1a143b96f209eb5a1b69, type: 2}
+  prefill:
+  - cell: {x: 1, y: 1}
+    shapeType: 3
+    rotationQuarterTurns: 0
+    colors: 050000000800000003000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 1, y: 2}
+    shapeType: 3
+    rotationQuarterTurns: 1
+    colors: 050000000400000007000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 2, y: 2}
+    shapeType: 3
+    rotationQuarterTurns: 2
+    colors: 070000000300000005000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 4, y: 2}
+    shapeType: 3
+    rotationQuarterTurns: 3
+    colors: 040000000400000008000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 2, y: 3}
+    shapeType: 3
+    rotationQuarterTurns: 3
+    colors: 050000000300000007000000
+    paletteOverride: {fileID: 0}
+  - cell: {x: 4, y: 4}
+    shapeType: 3
+    rotationQuarterTurns: 3
+    colors: 080000000300000007000000
+    paletteOverride: {fileID: 0}
+  traySequence: {fileID: 0}

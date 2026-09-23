@@ -151,6 +151,10 @@ namespace MyGame.Board
             }
         }
 
+        /// <summary>
+        /// Full clear: destroys cells and non-tray cubes. Prefills are skipped
+        /// because PrefilledCubeSpawner owns them and clears them explicitly.
+        /// </summary>
         public void Clear()
         {
             var dragController = FindFirstObjectByType<DragController>();
@@ -174,6 +178,42 @@ namespace MyGame.Board
                 Destroy(cubeGO);
             }
 
+            var leftovers = FindObjectsByType<DraggableCube>(FindObjectsSortMode.None);
+            for (int i = 0; i < leftovers.Length; i++)
+            {
+                var cube = leftovers[i];
+                if (cube == null) continue;
+                if (cube.IsTrayOwned) continue;
+                if (cube.GetComponentInParent<MyGame.Tray.CubeTray>() != null) continue;
+
+                cube.CleanupForDestroy();
+                Destroy(cube.gameObject);
+            }
+
+            SubGrid?.Clear();
+        }
+
+        /// <summary>
+        /// Destroys every cube currently on the board without touching cells or
+        /// board dimensions. Used by LevelLoader.RemoveAll for retry.
+        /// </summary>
+        public void ClearAllCubes()
+        {
+            var snapshot = new List<GameObject>(_occupied.Values);
+            _occupied.Clear();
+
+            for (int i = 0; i < snapshot.Count; i++)
+            {
+                var cubeGO = snapshot[i];
+                if (cubeGO == null) continue;
+
+                if (cubeGO.TryGetComponent(out DraggableCube cube))
+                    cube.CleanupForDestroy();
+
+                Destroy(cubeGO);
+            }
+
+            // Sweep orphans, skip tray-owned
             var leftovers = FindObjectsByType<DraggableCube>(FindObjectsSortMode.None);
             for (int i = 0; i < leftovers.Length; i++)
             {

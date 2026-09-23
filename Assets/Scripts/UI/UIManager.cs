@@ -72,7 +72,7 @@ namespace MyGame.UI
 
         private void Start()
         {
-            // HideAll();
+            //HideAll();
         }
 
         #endregion

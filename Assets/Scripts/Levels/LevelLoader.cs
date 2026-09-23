@@ -8,9 +8,9 @@ namespace MyGame.Levels
 {
     /// <summary>
     /// Loads a level. Runs before every other script (DefaultExecutionOrder -1000)
-    /// so the board, prefills, and trays are all in a deterministic state before
-    /// anything else's Awake/Start/Update runs.
+    /// so the board, prefills, and trays are in a deterministic state.
     /// </summary>
+    [DefaultExecutionOrder(-1000)]
     public class LevelLoader : MonoBehaviour
     {
         #region Inspector Fields
@@ -28,6 +28,7 @@ namespace MyGame.Levels
 
         [Header("Debug")]
         [SerializeField] private bool logPrefillColors = false;
+        [SerializeField] private bool logRetry = true;
 
         #endregion
 
@@ -85,14 +86,55 @@ namespace MyGame.Levels
             LoadIndex((_currentIndex + 1) % LevelCount);
         }
 
+        /// <summary>
+        /// Retry: remove every prefill, placed cube, and tray cube; reset the
+        /// shared sequence; then reload the current level from scratch.
+        /// </summary>
         public void ReloadCurrent()
         {
-            if (_currentIndex >= 0) LoadIndex(_currentIndex);
+            if (_currentIndex < 0)
+            {
+                Debug.LogWarning("[LevelLoader] ReloadCurrent: no current level.");
+                return;
+            }
+
+            if (logRetry)
+                Debug.Log($"[LevelLoader] Retry — removing all and reloading level {_currentIndex}.");
+
+            RemoveAll();
+            LoadIndex(_currentIndex);
         }
 
         #endregion
 
-        #region Apply
+        #region Remove All
+
+        /// <summary>
+        /// Tears down all board content: prefills, placed cubes, tray cubes,
+        /// sequence cursor, match subscriptions, and goal trackers.
+        /// After this, the scene is empty of board content.
+        /// </summary>
+        public void RemoveAll()
+        {
+            if (prefillSpawner != null)
+                prefillSpawner.ClearAll();
+
+            if (gridManager != null)
+                gridManager.ClearAllCubes();
+
+            if (trayManager != null)
+                trayManager.ResetAll();
+
+            if (matchManager != null)
+                matchManager.ClearAllSubscriptions();
+
+            if (goalSystem != null)
+                goalSystem.ClearGoals();
+        }
+
+        #endregion
+
+        #region Apply Level
 
         private void ApplyLevel(LevelDefinition level)
         {
@@ -102,22 +144,18 @@ namespace MyGame.Levels
             if (goalSystem == null) goalSystem = FindFirstObjectByType<LevelGoalSystem>();
             if (prefillSpawner == null) prefillSpawner = FindFirstObjectByType<PrefilledCubeSpawner>();
 
-            // 1. Clear previous prefills
-            if (prefillSpawner != null)
-                prefillSpawner.ClearAll();
-
-            // 2. Build the board
+            // 1. Build the board
             if (gridManager != null)
                 gridManager.Build(level.board);
 
-            // 3. Spawn prefills — colors assigned by the loader
+            // 2. Spawn prefills
             if (prefillSpawner != null && level.prefill != null)
             {
                 for (int i = 0; i < level.prefill.Length; i++)
                     SpawnPrefill(level.prefill[i], level.palette);
             }
 
-            // 4. Configure trays (no spawn yet)
+            // 3. Configure trays (no reset)
             if (trayManager != null)
             {
                 trayManager.ConfigureAll(
@@ -127,21 +165,22 @@ namespace MyGame.Levels
                     respawnDelay: level.respawnDelay,
                     reset: false
                 );
+
                 trayManager.SetSharedSequence(level.traySequence);
             }
 
-            // 5. Reset trays (spawn first cubes)
+            // 4. Reset trays (cursor → 0, spawn first cubes)
             if (trayManager != null)
                 trayManager.ResetAll(level.stockCount);
 
-            // 6. Match config + initial scan
+            // 5. Match config
             if (matchManager != null)
             {
                 matchManager.SetMinMatchSize(level.minMatchSize);
                 matchManager.ResolveNow();
             }
 
-            // 7. Goals
+            // 6. Goals
             if (goalSystem != null)
                 goalSystem.LoadGoals(level.goals);
 

@@ -106,6 +106,10 @@ MonoBehaviour:
   ghostPrefab: {fileID: 0}
   validTint: {r: 0.3, g: 1, b: 0.4, a: 0.45}
   invalidTint: {r: 1, g: 0.3, b: 0.3, a: 0.45}
+  yawQuarterTurns: 0
+  logRotation: 0
+  IsPrefilled: 0
+  IsTrayOwned: 0
 --- !u!114 &-8390181135907925615
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -122,12 +126,10 @@ MonoBehaviour:
   halfCube: {fileID: 3522785088484918257, guid: 42eedc044b5ad204683d7ab6fae182e0, type: 3}
   smallCube: {fileID: 3522785088484918257, guid: 343a2bad77e8b56439e7e79a3ae8b9df, type: 3}
   shapeType: 0
-  rotationQuarterTurns: 3
   cellSize: 1
+  randomizeHalfOrientation: 1
+  randomizePlacement: 1
   palette: {fileID: 0}
-  shapeColor: 0
-  randomizePerSlotColor: 1
-  colorPool: 0100000002000000030000000400000005000000
 --- !u!1 &4049257599123577326
 GameObject:
   m_ObjectHideFlags: 0

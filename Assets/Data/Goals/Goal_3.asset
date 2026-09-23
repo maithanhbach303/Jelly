@@ -16,15 +16,7 @@ MonoBehaviour:
   description: 
   icon: {fileID: 0}
   requirements:
-  - color: 1
-    count: 2
-  - color: 2
-    count: 2
   - color: 3
-    count: 2
-  - color: 4
-    count: 2
-  - color: 5
-    count: 2
+    count: 8
   - color: 7
-    count: 2
+    count: 6

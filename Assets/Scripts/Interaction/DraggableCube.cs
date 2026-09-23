@@ -29,6 +29,14 @@ namespace MyGame.Interaction
         [SerializeField] private Color validTint = new(0.3f, 1f, 0.4f, 0.45f);
         [SerializeField] private Color invalidTint = new(1f, 0.3f, 0.3f, 0.45f);
 
+        [Header("Rotation")]
+        [Tooltip("0 = 0°, 1 = 90°, 2 = 180°, 3 = 270°")]
+        [Range(0, 3)]
+        [SerializeField] private int yawQuarterTurns = 0;
+
+        [Header("Debug")]
+        [SerializeField] private bool logRotation = false;
+
         #endregion
 
         #region Ownership Flags
@@ -61,7 +69,7 @@ namespace MyGame.Interaction
         private Vector3 _snapVelocity;
         private Vector3 _scaleVelocity;
 
-        // --- Pending sequence spec (applied after every shape.Build) ---
+        // Pending sequence spec
         private bool _hasPendingSpec;
         private TraySequence.CubeSpec _pendingSpec;
         private CubePalette _pendingSpecPalette;
@@ -76,6 +84,9 @@ namespace MyGame.Interaction
         public CubeShape Shape => shape;
         public bool HasPendingSpec => _hasPendingSpec;
 
+        public int YawQuarterTurns => yawQuarterTurns;
+        public Quaternion HomeRotation => Quaternion.Euler(0f, yawQuarterTurns * 90f, 0f);
+
         #endregion
 
         #region Events
@@ -89,7 +100,8 @@ namespace MyGame.Interaction
 
         private void Awake()
         {
-            if (shape == null) shape = GetComponentInChildren<CubeShape>();
+            if (shape == null)
+                shape = GetComponentInChildren<CubeShape>();
         }
 
         private void Start()
@@ -104,18 +116,18 @@ namespace MyGame.Interaction
             _homePosition = transform.position;
             _homeScale = transform.localScale;
 
-            if (shape != null && _grid != null && _grid.Board != null)
+            if (shape != null)
             {
-                shape.SetCellSize(_grid.Board.cellSize);
-                shape.Build();
-            }
-            else if (shape != null)
-            {
+                if (_grid != null && _grid.Board != null)
+                    shape.SetCellSize(_grid.Board.cellSize);
+
                 shape.Build();
             }
 
-            // Re-apply the sequence colors AFTER the shape has been (re)built.
+            // Reassert pending spec (shape type + palette + colors) and rotation
+            // AFTER Build() so nothing gets wiped.
             ReapplyPendingSpec();
+            ApplyHomeRotation();
 
             ResizeColliderToShape();
             SpawnGhost();
@@ -123,6 +135,9 @@ namespace MyGame.Interaction
             if (_grid != null) _grid.OnBoardBuilt += HandleBoardRebuilt;
 
             _initialized = true;
+
+            if (logRotation)
+                Debug.Log($"[DraggableCube '{name}'] Initialized rotation={yawQuarterTurns * 90f}°", this);
         }
 
         private void OnEnable()
@@ -155,37 +170,62 @@ namespace MyGame.Interaction
 
         #region Public API
 
+        public void SetYawQuarterTurns(int turns)
+        {
+            yawQuarterTurns = ((turns % 4) + 4) % 4;
+            ApplyHomeRotation();
+
+            if (_occupiedCell.HasValue && _grid != null && _grid.SubGrid != null)
+            {
+                UnregisterSubCubes();
+                RegisterSubCubes(_occupiedCell.Value);
+            }
+
+            if (logRotation)
+                Debug.Log($"[DraggableCube '{name}'] SetYawQuarterTurns -> {yawQuarterTurns} ({yawQuarterTurns * 90f}°)", this);
+        }
+
         public void InitializeForPrefill(GridManager grid)
         {
-            if (_initialized) return;
+            if (_initialized)
+            {
+                ApplyHomeRotation();
+                return;
+            }
 
             _grid = grid;
             _homePosition = transform.position;
             _homeScale = transform.localScale;
 
-            if (shape != null && _grid != null && _grid.Board != null)
+            if (shape != null)
             {
-                shape.SetCellSize(_grid.Board.cellSize);
+                if (_grid != null && _grid.Board != null)
+                    shape.SetCellSize(_grid.Board.cellSize);
+
                 shape.Build();
             }
 
             ReapplyPendingSpec();
+            ApplyHomeRotation();
 
             ResizeColliderToShape();
             _initialized = true;
+
+            if (logRotation)
+                Debug.Log($"[DraggableCube '{name}'] InitializeForPrefill rotation={yawQuarterTurns * 90f}°", this);
         }
 
-        /// <summary>
-        /// Stores a sequence spec so colors can be re-applied after any future
-        /// shape.Build() (Initialize, board rebuild, etc.). Also applies it now.
-        /// </summary>
         public void SetPendingSpec(TraySequence.CubeSpec spec, CubePalette resolvedPalette)
         {
             _pendingSpec = spec;
             _pendingSpecPalette = resolvedPalette;
             _hasPendingSpec = true;
 
+            SetYawQuarterTurns(spec.rotationQuarterTurns);
             ReapplyPendingSpec();
+
+            if (logRotation)
+                Debug.Log($"[DraggableCube '{name}'] Sequence rotation = {spec.rotationQuarterTurns} ({spec.rotationQuarterTurns * 90f}°)", this);
         }
 
         public void ClearPendingSpec()
@@ -230,17 +270,52 @@ namespace MyGame.Interaction
 
         #endregion
 
+        #region Rotation
+
+        private void ApplyHomeRotation()
+        {
+            transform.localRotation = HomeRotation;
+
+            if (logRotation)
+                Debug.Log($"[DraggableCube '{name}'] ApplyHomeRotation -> {yawQuarterTurns * 90f}°", this);
+        }
+
+        private static Vector2 RotateSlotCenter(Vector2 c, int yaw)
+        {
+            switch (((yaw % 4) + 4) % 4)
+            {
+                case 1:  return new Vector2(c.y, 1f - c.x);
+                case 2:  return new Vector2(1f - c.x, 1f - c.y);
+                case 3:  return new Vector2(1f - c.y, c.x);
+                default: return c;
+            }
+        }
+
+        private static Vector2 RotateSlotSize(Vector2 size, int yaw)
+        {
+            int k = ((yaw % 4) + 4) % 4;
+            return (k == 1 || k == 3) ? new Vector2(size.y, size.x) : size;
+        }
+
+        #endregion
+
         #region Spec Application
 
+        /// <summary>
+        /// Re-asserts the pending spec: shape type, palette, and colors.
+        /// Safe to call after shape.Build(); it rebuilds blocks if the shape
+        /// type changed, then re-colors them.
+        /// </summary>
         private void ReapplyPendingSpec()
         {
             if (!_hasPendingSpec) return;
             if (shape == null) return;
 
-            var palette = _pendingSpecPalette;
-            shape.SetPalette(palette);
+            // Reassert shape type FIRST — this may rebuild blocks.
+            shape.SetShape(_pendingSpec.shapeType);
 
-            // Apply colors after build
+            // Then palette + colors on the freshly built blocks.
+            shape.SetPalette(_pendingSpecPalette);
             ApplySpecColors(shape, _pendingSpec.colors);
         }
 
@@ -291,7 +366,7 @@ namespace MyGame.Interaction
         {
             if (ghostPrefab == null) return;
 
-            _ghost = Instantiate(ghostPrefab, transform.position, Quaternion.identity);
+            _ghost = Instantiate(ghostPrefab, transform.position, HomeRotation);
             _ghost.SetActive(false);
             _ghostRenderer = _ghost.GetComponentInChildren<Renderer>();
 
@@ -299,9 +374,7 @@ namespace MyGame.Interaction
             {
                 float s = _grid.Board.cellSize * 0.9f;
                 _ghost.transform.localScale = new Vector3(s, s, s);
-                _ghost.transform.rotation = (_grid.Board.plane == BoardDefinition.BoardPlane.XZ_3D)
-                    ? Quaternion.Euler(90f, 0f, 0f)
-                    : Quaternion.identity;
+                _ghost.transform.localRotation = HomeRotation;
             }
         }
 
@@ -313,6 +386,7 @@ namespace MyGame.Interaction
             bool canPlace = _grid.CanPlaceAt(grid, gameObject);
 
             _ghost.transform.position = _grid.GetWorldPosition(grid) + Vector3.up * 0.02f;
+            _ghost.transform.localRotation = HomeRotation;
 
             if (_ghostRenderer != null)
                 _ghostRenderer.material.color = canPlace ? validTint : invalidTint;
@@ -330,6 +404,7 @@ namespace MyGame.Interaction
                 transform.position, target, ref _dragVelocity,
                 dragSmoothTime, Mathf.Infinity, Time.deltaTime);
 
+            transform.localRotation = HomeRotation;
             UpdateGhost();
         }
 
@@ -354,6 +429,12 @@ namespace MyGame.Interaction
                 transform.position, _snapTargetPosition, ref _snapVelocity,
                 snapSmoothTime, Mathf.Infinity, Time.deltaTime);
 
+            transform.localRotation = Quaternion.RotateTowards(
+                transform.localRotation, HomeRotation, 720f * Time.deltaTime);
+
+            if (Quaternion.Angle(transform.localRotation, HomeRotation) < 0.01f)
+                transform.localRotation = HomeRotation;
+
             if (!_pulseActive)
             {
                 transform.localScale = Vector3.SmoothDamp(
@@ -372,6 +453,7 @@ namespace MyGame.Interaction
                 if (!_pulseActive)
                 {
                     transform.localScale = _snapTargetScale;
+                    transform.localRotation = HomeRotation;
                     _scaleVelocity = Vector3.zero;
                     _snapping = false;
                 }
@@ -410,6 +492,7 @@ namespace MyGame.Interaction
 
             transform.position = _snapTargetPosition;
             transform.localScale = baseScale;
+            transform.localRotation = HomeRotation;
             _scaleVelocity = Vector3.zero;
             _snapVelocity = Vector3.zero;
             _pulseActive = false;
@@ -430,7 +513,6 @@ namespace MyGame.Interaction
             _dragging = true;
             _snapping = false;
             _dragVelocity = Vector3.zero;
-
             _dragTarget = transform.position;
 
             if (_ghost != null) _ghost.SetActive(true);
@@ -439,10 +521,7 @@ namespace MyGame.Interaction
                 OnRemovedFromBoard?.Invoke(this);
         }
 
-        public void OnDrag(Vector3 worldGroundPoint)
-        {
-            _dragTarget = worldGroundPoint;
-        }
+        public void OnDrag(Vector3 worldGroundPoint) => _dragTarget = worldGroundPoint;
 
         public void OnDrop()
         {
@@ -458,11 +537,7 @@ namespace MyGame.Interaction
 
         private void TryPlace(bool playPulse, bool fireEvents)
         {
-            if (_grid == null)
-            {
-                ReturnHome();
-                return;
-            }
+            if (_grid == null) { ReturnHome(); return; }
 
             Vector2Int grid = _grid.GetGridPosition(transform.position);
             bool canPlace = _grid.CanPlaceAt(grid, gameObject);
@@ -493,6 +568,7 @@ namespace MyGame.Interaction
                     {
                         transform.position = _homePosition;
                         transform.localScale = _homeScale;
+                        transform.localRotation = HomeRotation;
                         _snapping = false;
                         _pulseActive = false;
                     }
@@ -510,6 +586,7 @@ namespace MyGame.Interaction
 
             transform.position = _homePosition;
             transform.localScale = _homeScale;
+            transform.localRotation = HomeRotation;
             _snapping = false;
             _pulseActive = false;
         }
@@ -523,12 +600,18 @@ namespace MyGame.Interaction
             if (_grid == null || _grid.SubGrid == null) return;
             if (shape == null) return;
 
+            int yaw = yawQuarterTurns;
             var blocks = shape.Blocks;
+
             for (int i = 0; i < blocks.Count; i++)
             {
                 var sub = blocks[i];
                 if (sub == null) continue;
-                _grid.SubGrid.Register(sub, cell, sub.SlotPosition, sub.SlotSize);
+
+                Vector2 rotatedCenter = RotateSlotCenter(sub.SlotPosition, yaw);
+                Vector2 rotatedSize   = RotateSlotSize(sub.SlotSize, yaw);
+
+                _grid.SubGrid.Register(sub, cell, rotatedCenter, rotatedSize);
             }
         }
 
@@ -560,8 +643,8 @@ namespace MyGame.Interaction
                 shape.SetCellSize(def.cellSize);
                 shape.Build();
 
-                // Re-apply sequence colors after the rebuild
                 ReapplyPendingSpec();
+                ApplyHomeRotation();
 
                 ResizeColliderToShape();
             }
