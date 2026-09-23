@@ -17,12 +17,12 @@ MonoBehaviour:
     enabled: 0
     weight: 3
   - shape: 1
-    enabled: 1
+    enabled: 0
     weight: 2
   - shape: 2
     enabled: 0
     weight: 2
   - shape: 3
-    enabled: 0
+    enabled: 1
     weight: 1
   avoidImmediateRepeat: 0

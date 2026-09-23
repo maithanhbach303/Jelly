@@ -67,13 +67,14 @@ namespace MyGame.Tray
             {
                 float cell = (gridManager != null && gridManager.Board != null)
                     ? gridManager.Board.cellSize : 1f;
+
                 shape.SetCellSize(cell);
                 shape.SetPalette(palette);
 
-                if (shapeDefinition != null && shapeDefinition.TryPick(out var type, out var rot))
-                    shape.SetShape(type, rot);
+                if (shapeDefinition != null && shapeDefinition.TryPick(out var type, out _))
+                    shape.SetShape(type);
                 else
-                    shape.SetShape(CubeShapeType.Whole, 0);
+                    shape.SetShape(CubeShapeType.Whole);
             }
 
             if (!cube.TryGetComponent(out DraggableCube draggable))

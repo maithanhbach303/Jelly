@@ -13,12 +13,21 @@ namespace MyGame.Interaction
 
     /// <summary>
     /// Builds a single-cell cube layout from pre-sized sub-cube prefabs.
-    /// Pivot is at the BOTTOM-CENTER of the cell footprint.
-    /// Slot layouts are in cell units (0,0 = cell bottom-left, 1,1 = top-right).
+    ///
+    /// Conventions:
+    ///  - Shape pivot is at the BOTTOM-CENTER of the cell footprint.
+    ///  - Shape's transform is never rotated (world-aligned axes).
+    ///  - Each slot gets a rotation-free pivot; only the sub-cube itself may be rotated.
+    ///  - Slot positions are in cell units: (0,0) bottom-left, (1,1) top-right.
     /// </summary>
     public class CubeShape : MonoBehaviour
     {
+        #region Nested Types
+
+        /// <summary>Kind of block occupying a slot. Determines footprint, ray count, etc.</summary>
         public enum BlockKind { Whole, Half, Small }
+
+        #endregion
 
         #region Inspector Fields
 
@@ -29,11 +38,15 @@ namespace MyGame.Interaction
 
         [Header("Shape")]
         [SerializeField] private CubeShapeType shapeType = CubeShapeType.Whole;
-        [Range(0, 3)]
-        [SerializeField] private int rotationQuarterTurns = 0;
         [SerializeField] private float cellSize = 1f;
 
-        [Header("Color")]
+        [Tooltip("If true, halves are randomly oriented horizontally or vertically.")]
+        [SerializeField] private bool randomizeHalfOrientation = true;
+
+        [Tooltip("If true, placement is randomized each build. If false, the default authored layout is used.")]
+        [SerializeField] private bool randomizePlacement = true;
+
+        [Header("Color (configured by tray at spawn)")]
         [SerializeField] private CubePalette palette;
         [SerializeField] private CubeColor shapeColor = CubeColor.None;
         [SerializeField] private bool randomizePerSlotColor = false;
@@ -54,11 +67,9 @@ namespace MyGame.Interaction
 
         private readonly List<SubCube> _spawned = new();
         private bool _built;
-
-        public bool IsBuilding { get; private set; }
+        private bool _isBuilding;
 
         public CubeShapeType ShapeType => shapeType;
-        public int RotationQuarterTurns => rotationQuarterTurns;
         public float CellSize => cellSize;
         public Vector2 ShapeSize => new Vector2(1f, 1f);
         public Vector3 WorldSize => new Vector3(cellSize, cellSize, cellSize);
@@ -66,6 +77,9 @@ namespace MyGame.Interaction
         public IReadOnlyList<SubCube> Blocks => _spawned;
         public CubeColor ShapeColor => shapeColor;
         public CubePalette Palette => palette;
+
+        /// <summary>True while Build() is executing. Used by the growth resolver to skip mid-rebuild shapes.</summary>
+        public bool IsBuilding => _isBuilding;
 
         public event System.Action<CubeShape> OnShapeChanged;
 
@@ -93,22 +107,12 @@ namespace MyGame.Interaction
         public void SetRandomPerSlotColors(CubeColor[] pool)
         {
             if (pool != null && pool.Length > 0) colorPool = pool;
-
-            // Strip None from the pool as a safety net
-            if (colorPool != null)
-            {
-                var clean = new List<CubeColor>();
-                foreach (var c in colorPool) if (c != CubeColor.None) clean.Add(c);
-                if (clean.Count > 0) colorPool = clean.ToArray();
-            }
-
             randomizePerSlotColor = true;
         }
 
-        public void SetShape(CubeShapeType type, int quarterTurns = 0)
+        public void SetShape(CubeShapeType type)
         {
             shapeType = type;
-            rotationQuarterTurns = Mathf.Clamp(quarterTurns, 0, 3);
             Build();
         }
 
@@ -120,70 +124,103 @@ namespace MyGame.Interaction
         }
 
         /// <summary>
-        /// Replaces a sub-cube with a fresh instance of the correct prefab for the given kind.
-        /// yaw = 0 → half spans X (wide, short). yaw = 1 → half spans Z (narrow, tall).
+        /// Infers the block kind from a slot's footprint size (in cell units).
+        /// Used by the growth resolver to decide what a slot has become.
         /// </summary>
-        public SubCube ReplaceSubCube(SubCube oldSub, BlockKind newKind, Vector2 center, Vector2 size, int yaw = 0)
+        public static BlockKind KindFromSlotSize(Vector2 size)
+        {
+            bool fullX = Mathf.Approximately(size.x, 1f);
+            bool fullY = Mathf.Approximately(size.y, 1f);
+
+            if (fullX && fullY) return BlockKind.Whole;
+            if (!fullX && !fullY) return BlockKind.Small;
+            return BlockKind.Half;
+        }
+
+        /// <summary>
+        /// Replaces a sub-cube with a new one of the target kind, reusing the same pivot.
+        /// Returns the new SubCube, or null on failure.
+        /// Used by the growth resolver when a surviving sub-cube grows into a freed slot.
+        /// </summary>
+        public SubCube ReplaceSubCube(SubCube oldSub, BlockKind newKind, Vector2 newCenter, Vector2 newSize, int yaw)
         {
             if (oldSub == null) return null;
 
-            CubeColor preserveColor = oldSub.CurrentColor;
+            int index = _spawned.IndexOf(oldSub);
+            if (index < 0) return null;
 
-            if (_spawned.Contains(oldSub))
-                _spawned.Remove(oldSub);
+            Transform oldPivot = oldSub.SlotPivot != null ? oldSub.SlotPivot : oldSub.transform.parent;
+            CubeColor oldColor = oldSub.CurrentColor;
 
-            // Prevent the deferred-destroy object from running any logic this frame
-            oldSub.enabled = false;
-            Destroy(oldSub.gameObject);
+            // Remove old sub-cube (but keep the pivot)
+            Object.Destroy(oldSub.gameObject);
+            _spawned.RemoveAt(index);
 
             GameObject prefab = PickPrefab(newKind);
-            if (prefab == null) return null;
-
-            GameObject go = Instantiate(prefab, transform);
-
-            go.transform.localPosition = new Vector3(
-                (center.x - 0.5f) * cellSize,
-                0f,
-                (center.y - 0.5f) * cellSize
-            );
-            go.transform.localRotation = Quaternion.Euler(0f, yaw * 90f, 0f);
-
-            if (!Mathf.Approximately(cellSize, 1f))
-                go.transform.localScale = Vector3.one * cellSize;
-
-            if (go.TryGetComponent(out SubCube newSub))
+            if (prefab == null)
             {
-                newSub.Initialize(this, center, size, palette);
-                newSub.SetColor(preserveColor);
-                _spawned.Add(newSub);
-                return newSub;
+                Debug.LogWarning($"[CubeShape] ReplaceSubCube: no prefab for {newKind}");
+                return null;
             }
 
-            return null;
-        }
+            // Reuse the pivot or create one
+            Transform pivot = oldPivot;
+            if (pivot == null)
+            {
+                var pivotGO = new GameObject($"Slot_{newKind}_{newCenter.x}_{newCenter.y}");
+                pivotGO.transform.SetParent(transform, worldPositionStays: false);
+                pivot = pivotGO.transform;
+            }
 
-        public static BlockKind KindFromSlotSize(Vector2 size)
-        {
-            bool oneX = Mathf.Approximately(size.x, 1f);
-            bool oneY = Mathf.Approximately(size.y, 1f);
-            bool halfX = Mathf.Approximately(size.x, 0.5f);
-            bool halfY = Mathf.Approximately(size.y, 0.5f);
+            // Position the pivot for the new slot
+            float cs = cellSize;
+            pivot.localPosition = new Vector3(
+                (newCenter.x - 0.5f) * cs,
+                0f,
+                (newCenter.y - 0.5f) * cs
+            );
+            pivot.localRotation = Quaternion.identity;
+            pivot.localScale = Vector3.one;
 
-            if (oneX && oneY) return BlockKind.Whole;
-            if (halfX && halfY) return BlockKind.Small;
-            return BlockKind.Half;
+            // Instantiate the new sub-cube
+            GameObject go = Instantiate(prefab, pivot);
+            go.transform.localPosition = Vector3.zero;
+            go.transform.localRotation = Quaternion.Euler(0f, yaw * 90f, 0f);
+            go.transform.localScale = Vector3.one;
+
+            if (!go.TryGetComponent(out SubCube newSub))
+            {
+                Debug.LogWarning($"[CubeShape] ReplaceSubCube: prefab '{prefab.name}' has no SubCube component.");
+                Object.Destroy(go);
+                return null;
+            }
+
+            newSub.Initialize(this, newCenter, newSize, palette);
+            newSub.SetColor(oldColor);
+            _spawned.Add(newSub);
+
+            OnShapeChanged?.Invoke(this);
+            return newSub;
         }
 
         #endregion
 
         #region Build / Clear
 
+        private void Awake()
+        {
+            // Guarantee a clean world-aligned frame
+            transform.localRotation = Quaternion.identity;
+        }
+
         public void Build()
         {
-            if (IsBuilding) return;
-            IsBuilding = true;
+            if (_isBuilding) return;
+            _isBuilding = true;
             try
             {
+                transform.localRotation = Quaternion.identity;
+
                 Clear();
 
                 if (wholeCube == null || halfCube == null || smallCube == null)
@@ -192,28 +229,36 @@ namespace MyGame.Interaction
                     return;
                 }
 
-                var slots = GetSlots(shapeType, rotationQuarterTurns);
-                Vector2 shapeCenter = ShapeSize * 0.5f;
+                var slots = BuildSlotLayout(shapeType);
 
                 CubeColor[] dealt = null;
-                if (randomizePerSlotColor) dealt = DealUniqueColors(slots.Count);
+                if (randomizePerSlotColor)
+                    dealt = DealUniqueColors(slots.Count);
+
                 int dealtIndex = 0;
+                Vector2 shapeCenter = ShapeSize * 0.5f;
 
                 foreach (var slot in slots)
                 {
                     GameObject prefab = PickPrefab(slot.kind);
                     if (prefab == null) continue;
 
-                    GameObject go = Instantiate(prefab, transform);
-                    go.transform.localPosition = new Vector3(
+                    // Rotation-free pivot at the slot position
+                    var pivot = new GameObject($"Slot_{slot.kind}_{slot.center.x}_{slot.center.y}");
+                    pivot.transform.SetParent(transform, worldPositionStays: false);
+                    pivot.transform.localPosition = new Vector3(
                         (slot.center.x - shapeCenter.x) * cellSize,
                         0f,
                         (slot.center.y - shapeCenter.y) * cellSize
                     );
-                    go.transform.localRotation = Quaternion.Euler(0f, slot.yaw * 90f, 0f);
+                    pivot.transform.localRotation = Quaternion.identity;
+                    pivot.transform.localScale = Vector3.one;
 
-                    if (!Mathf.Approximately(cellSize, 1f))
-                        go.transform.localScale = Vector3.one * cellSize;
+                    // Sub-cube under the pivot
+                    GameObject go = Instantiate(prefab, pivot.transform);
+                    go.transform.localPosition = Vector3.zero;
+                    go.transform.localRotation = Quaternion.Euler(0f, slot.yaw * 90f, 0f);
+                    go.transform.localScale = Vector3.one;
 
                     if (go.TryGetComponent(out SubCube sub))
                     {
@@ -223,10 +268,12 @@ namespace MyGame.Interaction
                             ? dealt[dealtIndex++]
                             : shapeColor;
 
-                        if (assigned == CubeColor.None) assigned = CubeColor.None;
-
                         sub.SetColor(assigned);
                         _spawned.Add(sub);
+                    }
+                    else
+                    {
+                        Debug.LogWarning($"CubeShape: prefab '{prefab.name}' has no SubCube component.", prefab);
                     }
                 }
 
@@ -235,25 +282,197 @@ namespace MyGame.Interaction
             }
             finally
             {
-                IsBuilding = false;
+                _isBuilding = false;
             }
         }
 
         public void Clear()
         {
-            for (int i = 0; i < _spawned.Count; i++)
-            {
-                var s = _spawned[i];
-                if (s == null) continue;
-                s.enabled = false;
-                Destroy(s.gameObject);
-            }
+            foreach (var s in _spawned) if (s != null) Destroy(s.gameObject);
             _spawned.Clear();
 
             for (int i = transform.childCount - 1; i >= 0; i--)
                 Destroy(transform.GetChild(i).gameObject);
 
             _built = false;
+        }
+
+        #endregion
+
+        #region Slot Layout
+
+        private struct Slot
+        {
+            public Vector2 center;
+            public Vector2 size;
+            public BlockKind kind;
+            public int yaw;
+
+            public Slot(Vector2 center, Vector2 size, BlockKind kind, int yaw = 0)
+            {
+                this.center = center;
+                this.size = size;
+                this.kind = kind;
+                this.yaw = yaw;
+            }
+        }
+
+        private List<Slot> BuildSlotLayout(CubeShapeType type)
+        {
+            return randomizePlacement ? BuildRandomLayout(type) : BuildDefaultLayout(type);
+        }
+
+        private static List<Slot> BuildDefaultLayout(CubeShapeType type)
+        {
+            switch (type)
+            {
+                case CubeShapeType.Whole:
+                    return new List<Slot>
+                    {
+                        new Slot(new Vector2(0.5f, 0.5f), new Vector2(1f, 1f), BlockKind.Whole),
+                    };
+
+                case CubeShapeType.FourSmall:
+                    return new List<Slot>
+                    {
+                        new Slot(new Vector2(0.25f, 0.25f), new Vector2(0.5f, 0.5f), BlockKind.Small),
+                        new Slot(new Vector2(0.75f, 0.25f), new Vector2(0.5f, 0.5f), BlockKind.Small),
+                        new Slot(new Vector2(0.25f, 0.75f), new Vector2(0.5f, 0.5f), BlockKind.Small),
+                        new Slot(new Vector2(0.75f, 0.75f), new Vector2(0.5f, 0.5f), BlockKind.Small),
+                    };
+
+                case CubeShapeType.TwoHalf:
+                    return new List<Slot>
+                    {
+                        new Slot(new Vector2(0.5f, 0.25f), new Vector2(1f, 0.5f), BlockKind.Half, yaw: 1),
+                        new Slot(new Vector2(0.5f, 0.75f), new Vector2(1f, 0.5f), BlockKind.Half, yaw: 1),
+                    };
+
+                case CubeShapeType.HalfAndTwoSmall:
+                    return new List<Slot>
+                    {
+                        new Slot(new Vector2(0.5f, 0.25f), new Vector2(1f, 0.5f), BlockKind.Half, yaw: 1),
+                        new Slot(new Vector2(0.25f, 0.75f), new Vector2(0.5f, 0.5f), BlockKind.Small),
+                        new Slot(new Vector2(0.75f, 0.75f), new Vector2(0.5f, 0.5f), BlockKind.Small),
+                    };
+
+                default:
+                    return new List<Slot>();
+            }
+        }
+
+        private List<Slot> BuildRandomLayout(CubeShapeType type)
+        {
+            var result = new List<Slot>();
+            var taken = new bool[2, 2];
+
+            switch (type)
+            {
+                case CubeShapeType.Whole:
+                    result.Add(new Slot(new Vector2(0.5f, 0.5f), new Vector2(1f, 1f), BlockKind.Whole));
+                    return result;
+
+                case CubeShapeType.FourSmall:
+                    for (int i = 0; i < 4; i++)
+                        if (TryPlaceSmall(taken, out var s)) result.Add(s);
+                    return result;
+
+                case CubeShapeType.TwoHalf:
+                    for (int i = 0; i < 2; i++)
+                        if (TryPlaceHalf(taken, out var s)) result.Add(s);
+                    return result;
+
+                case CubeShapeType.HalfAndTwoSmall:
+                    if (TryPlaceHalf(taken, out var h)) result.Add(h);
+                    for (int i = 0; i < 2; i++)
+                        if (TryPlaceSmall(taken, out var s)) result.Add(s);
+                    return result;
+
+                default:
+                    return result;
+            }
+        }
+
+        private static bool TryPlaceSmall(bool[,] taken, out Slot slot)
+        {
+            slot = default;
+
+            var free = new List<Vector2Int>(4);
+            for (int x = 0; x < 2; x++)
+                for (int y = 0; y < 2; y++)
+                    if (!taken[x, y]) free.Add(new Vector2Int(x, y));
+
+            if (free.Count == 0) return false;
+
+            var pick = free[Random.Range(0, free.Count)];
+            taken[pick.x, pick.y] = true;
+
+            slot = new Slot(
+                center: new Vector2(0.25f + pick.x * 0.5f, 0.25f + pick.y * 0.5f),
+                size: new Vector2(0.5f, 0.5f),
+                kind: BlockKind.Small
+            );
+            return true;
+        }
+
+        private bool TryPlaceHalf(bool[,] taken, out Slot slot)
+        {
+            slot = default;
+
+            var options = new List<Slot>(4);
+
+            // Horizontal halves (span X): occupy a full sub-row
+            for (int y = 0; y < 2; y++)
+            {
+                if (!taken[0, y] && !taken[1, y])
+                {
+                    options.Add(new Slot(
+                        center: new Vector2(0.5f, 0.25f + y * 0.5f),
+                        size: new Vector2(1f, 0.5f),
+                        kind: BlockKind.Half,
+                        yaw: 1
+                    ));
+                }
+            }
+
+            // Vertical halves (span Z): occupy a full sub-column
+            for (int x = 0; x < 2; x++)
+            {
+                if (!taken[x, 0] && !taken[x, 1])
+                {
+                    options.Add(new Slot(
+                        center: new Vector2(0.25f + x * 0.5f, 0.5f),
+                        size: new Vector2(0.5f, 1f),
+                        kind: BlockKind.Half,
+                        yaw: 0
+                    ));
+                }
+            }
+
+            if (options.Count == 0) return false;
+
+            if (!randomizeHalfOrientation)
+            {
+                var preferred = options.FindAll(o => Mathf.Approximately(o.size.x, 1f));
+                if (preferred.Count > 0) options = preferred;
+            }
+
+            slot = options[Random.Range(0, options.Count)];
+
+            if (Mathf.Approximately(slot.size.x, 1f))
+            {
+                int y = Mathf.RoundToInt((slot.center.y - 0.25f) / 0.5f);
+                taken[0, y] = true;
+                taken[1, y] = true;
+            }
+            else
+            {
+                int x = Mathf.RoundToInt((slot.center.x - 0.25f) / 0.5f);
+                taken[x, 0] = true;
+                taken[x, 1] = true;
+            }
+
+            return true;
         }
 
         #endregion
@@ -269,15 +488,12 @@ namespace MyGame.Interaction
                 ? colorPool
                 : new[] { shapeColor };
 
-            var clean = new List<CubeColor>();
-            foreach (var c in pool) if (c != CubeColor.None) clean.Add(c);
-            if (clean.Count == 0) clean.Add(CubeColor.None);
-
-            var bag = new List<CubeColor>(clean);
+            var bag = new List<CubeColor>(pool);
 
             for (int i = 0; i < count; i++)
             {
-                if (bag.Count == 0) bag.AddRange(clean);
+                if (bag.Count == 0) bag.AddRange(pool);
+
                 int pick = Random.Range(0, bag.Count);
                 result[i] = bag[pick];
                 bag.RemoveAt(pick);
@@ -298,87 +514,14 @@ namespace MyGame.Interaction
 #if UNITY_EDITOR
         private void OnValidate()
         {
-            if (Application.isPlaying && isActiveAndEnabled && _built) Build();
+            if (Application.isPlaying && isActiveAndEnabled && _built)
+                Build();
         }
 #endif
 
         #endregion
 
-        #region Slot Layout
-
-        private struct Slot
-        {
-            public Vector2 center;
-            public Vector2 size;
-            public BlockKind kind;
-            public int yaw;
-
-            public Slot(float cx, float cy, float sx, float sy, BlockKind kind, int yaw = 0)
-            {
-                center = new Vector2(cx, cy);
-                size = new Vector2(sx, sy);
-                this.kind = kind;
-                this.yaw = yaw;
-            }
-        }
-
-        private static List<Slot> GetSlots(CubeShapeType type, int quarterTurns)
-        {
-            List<Slot> slots = type switch
-            {
-                CubeShapeType.Whole => new List<Slot>
-                {
-                    new Slot(0.5f, 0.5f, 1f, 1f, BlockKind.Whole),
-                },
-
-                CubeShapeType.FourSmall => new List<Slot>
-                {
-                    new Slot(0.25f, 0.25f, 0.5f, 0.5f, BlockKind.Small),
-                    new Slot(0.75f, 0.25f, 0.5f, 0.5f, BlockKind.Small),
-                    new Slot(0.25f, 0.75f, 0.5f, 0.5f, BlockKind.Small),
-                    new Slot(0.75f, 0.75f, 0.5f, 0.5f, BlockKind.Small),
-                },
-
-                CubeShapeType.TwoHalf => new List<Slot>
-                {
-                    new Slot(0.5f, 0.25f, 1f, 0.5f, BlockKind.Half, yaw: 1),
-                    new Slot(0.5f, 0.75f, 1f, 0.5f, BlockKind.Half, yaw: 1),
-                },
-
-                CubeShapeType.HalfAndTwoSmall => new List<Slot>
-                {
-                    new Slot(0.5f, 0.25f, 1f, 0.5f, BlockKind.Half),
-                    new Slot(0.25f, 0.75f, 0.5f, 0.5f, BlockKind.Small),
-                    new Slot(0.75f, 0.75f, 0.5f, 0.5f, BlockKind.Small),
-                },
-
-                _ => new List<Slot>()
-            };
-
-            if (quarterTurns != 0)
-            {
-                for (int i = 0; i < slots.Count; i++)
-                    slots[i] = RotateSlot(slots[i], quarterTurns);
-            }
-
-            return slots;
-        }
-
-        private static Slot RotateSlot(Slot s, int quarterTurns)
-        {
-            Vector2 c = s.center - new Vector2(0.5f, 0.5f);
-            Vector2 sz = s.size;
-            int yaw = s.yaw;
-
-            for (int i = 0; i < quarterTurns; i++)
-            {
-                c = new Vector2(c.y, -c.x);
-                sz = new Vector2(sz.y, sz.x);
-                yaw = (yaw + 1) % 4;
-            }
-
-            return new Slot(c.x + 0.5f, c.y + 0.5f, sz.x, sz.y, s.kind, yaw);
-        }
+        #region Prefab Picking
 
         private GameObject PickPrefab(BlockKind kind) => kind switch
         {
