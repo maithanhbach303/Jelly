@@ -68,5 +68,12 @@ namespace MyGame.Interaction
             if (Physics.Raycast(ray, out var hit, maxRayDistance, groundMask))
                 _active.OnDrag(hit.point);
         }
+
+        public void CancelDrag()
+        {
+            if (_active == null) return;
+            _active.OnDrop();   // snap back — or add a separate Cancel method if you want no snap
+            _active = null;
+        }
     }
 }

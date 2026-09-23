@@ -13,6 +13,9 @@ namespace MyGame.Match
     /// reach Whole as fast as possible. A Small can jump straight to Whole if
     /// the surrounding 2×2 sub-cells are free. A Half can grow to Whole if the
     /// adjacent row/column is free.
+    ///
+    /// Destruction signals: emitted once per sub-cube, before either the animated
+    /// or the instant destroy path. Goals and UI subscribe to SubCubeDestroyedSignal.
     /// </summary>
     public class SubCubeGrowthResolver
     {
@@ -23,12 +26,10 @@ namespace MyGame.Match
         private readonly List<DraggableCube> _affectedList = new();
 
         private const int MaxIterations = 64;
-        private const int MaxGrowthSteps = 4;   // Small → Half → Whole is 2 steps; 4 is safety headroom
+        private const int MaxGrowthSteps = 4;
 
-        /// <summary>Fires whenever a cube is destroyed because it ran out of sub-cubes.</summary>
         public event System.Action<DraggableCube> CubeDestroyed;
 
-        /// <summary>The animator used for merge visuals. Set by MatchManager.</summary>
         public MergeAnimator Animator { get; set; }
 
         #region Resolve Loop
@@ -50,10 +51,14 @@ namespace MyGame.Match
                 _detector.FindMatches(grid.SubGrid, _scratch, minMatchSize);
                 if (_scratch.Count == 0) break;
 
-                // 2. Gather affected cubes, unregister from sub-grid, remove from shapes
+                // 2. Prepare matches (unregister + remove from shapes)
                 var pending = PrepareMatches(grid, _scratch);
 
-                // 3. Animate merge for each group
+                // 3. Emit destruction signals ONCE, before either destroy path
+                for (int i = 0; i < pending.subCubes.Count; i++)
+                    DestroySignalEmitter.Emit(pending.subCubes[i]);
+
+                // 4. Animate or destroy
                 if (Animator != null && pending.totalSubCubes > 0)
                 {
                     yield return Animator.AnimateBatch(pending.groups, null);
@@ -64,10 +69,10 @@ namespace MyGame.Match
                     totalRemoved += DestroyPending(pending);
                 }
 
-                // 4. Grow survivors
+                // 5. Grow survivors
                 GrowAffectedCells(grid);
 
-                // 5. Cleanup empty cubes
+                // 6. Cleanup empty cubes
                 CleanupEmptyCubes(grid);
             }
 
@@ -110,14 +115,11 @@ namespace MyGame.Match
                     if (sub == null) continue;
                     if (!seen.Add(sub)) continue;
 
-                    // Unregister from the board's sub-grid immediately
                     grid.SubGrid?.Unregister(sub);
 
-                    // Remove from its shape
                     var owner = ResolveShape(sub);
                     if (owner != null) owner.RemoveBlock(sub);
 
-                    // Track affected cube for the growth pass
                     if (owner != null)
                     {
                         var draggable = owner.GetComponentInParent<DraggableCube>();
@@ -185,13 +187,11 @@ namespace MyGame.Match
 
             if (subs.Count == 0) return;
 
-            // Sort by footprint area, largest first — bigger blocks grow first and claim space
             subs.Sort((a, b) => SlotArea(b).CompareTo(SlotArea(a)));
 
             var occupied = new bool[2, 2];
             var footprints = new List<(SubCube sub, int xMin, int xMax, int yMin, int yMax)>();
 
-            // Record current footprints and mark the grid
             foreach (var sub in subs)
             {
                 var fp = SlotFootprint(sub.SlotPosition, sub.SlotSize);
@@ -206,12 +206,10 @@ namespace MyGame.Match
 
             foreach (var (sub, xMin, xMax, yMin, yMax) in footprints)
             {
-                // Temporarily free this sub-cube's own cells so it can grow into them
                 for (int x = xMin; x < xMax; x++)
                     for (int y = yMin; y < yMax; y++)
                         occupied[x, y] = false;
 
-                // Loop growth until it stabilizes
                 int gxMin = xMin, gxMax = xMax, gyMin = yMin, gyMax = yMax;
                 CubeShape.BlockKind finalKind = CubeShape.KindFromSlotSize(sub.SlotSize);
 
@@ -229,13 +227,11 @@ namespace MyGame.Match
 
                     if (!changed) break;
 
-                    // Free the grown region so the next iteration can consider extending further
                     for (int x = gxMin; x < gxMax; x++)
                         for (int y = gyMin; y < gyMax; y++)
                             occupied[x, y] = false;
                 }
 
-                // Re-occupy the final grown region
                 for (int x = gxMin; x < gxMax; x++)
                     for (int y = gyMin; y < gyMax; y++)
                         occupied[x, y] = true;
@@ -256,57 +252,40 @@ namespace MyGame.Match
                 ApplySlot(grid, cube, cell, sub, center, size, kind);
         }
 
-        /// <summary>
-        /// Given a sub-cube's current footprint (in sub-cell coords), return the largest
-        /// footprint it can grow into, given current occupancy.
-        /// Whole is preferred over Half, and Half over Small.
-        /// </summary>
         private (int xMin, int xMax, int yMin, int yMax, CubeShape.BlockKind kind) TryGrow(
             int xMin, int xMax, int yMin, int yMax, bool[,] occupied)
         {
             int w = xMax - xMin;
             int h = yMax - yMin;
 
-            // Already whole — max size, no further growth.
             if (w == 2 && h == 2)
                 return (xMin, xMax, yMin, yMax, CubeShape.BlockKind.Whole);
 
-            // ---- Try to reach WHOLE directly ----
-
-            // Vertical Half (w=1, h=2): grow horizontally
             if (w == 1 && h == 2)
             {
                 if (xMax < 2 && IsColumnFree(occupied, xMax, yMin, yMax))
                     return (xMin, xMax + 1, yMin, yMax, CubeShape.BlockKind.Whole);
-
                 if (xMin > 0 && IsColumnFree(occupied, xMin - 1, yMin, yMax))
                     return (xMin - 1, xMax, yMin, yMax, CubeShape.BlockKind.Whole);
-
                 return (xMin, xMax, yMin, yMax, CubeShape.BlockKind.Half);
             }
 
-            // Horizontal Half (w=2, h=1): grow vertically
             if (w == 2 && h == 1)
             {
                 if (yMax < 2 && IsRowFree(occupied, yMax, xMin, xMax))
                     return (xMin, xMax, yMin, yMax + 1, CubeShape.BlockKind.Whole);
-
                 if (yMin > 0 && IsRowFree(occupied, yMin - 1, xMin, xMax))
                     return (xMin, xMax, yMin - 1, yMax, CubeShape.BlockKind.Whole);
-
                 return (xMin, xMax, yMin, yMax, CubeShape.BlockKind.Half);
             }
 
-            // Small (w=1, h=1): try Whole first, then Half
             if (w == 1 && h == 1)
             {
-                // Try all 4 possible 2×2 windows that contain this cell
                 if (CanClaim2x2(occupied, xMin,     yMin,     out var wholeA)) return wholeA;
                 if (CanClaim2x2(occupied, xMin - 1, yMin,     out var wholeB)) return wholeB;
                 if (CanClaim2x2(occupied, xMin,     yMin - 1, out var wholeC)) return wholeC;
                 if (CanClaim2x2(occupied, xMin - 1, yMin - 1, out var wholeD)) return wholeD;
 
-                // Otherwise try to become a Half in any direction
                 if (xMax < 2 && !occupied[xMax, yMin])
                     return (xMin, xMax + 1, yMin, yMax, CubeShape.BlockKind.Half);
                 if (xMin > 0 && !occupied[xMin - 1, yMin])
@@ -319,12 +298,10 @@ namespace MyGame.Match
                 return (xMin, xMax, yMin, yMax, CubeShape.BlockKind.Small);
             }
 
-            // Fallback (shouldn't normally reach here)
             return (xMin, xMax, yMin, yMax,
                 CubeShape.KindFromSlotSize(new Vector2(w * 0.5f, h * 0.5f)));
         }
 
-        /// <summary>All cells in column x, rows yMin..yMax-1 are free?</summary>
         private static bool IsColumnFree(bool[,] occupied, int x, int yMin, int yMax)
         {
             if (x < 0 || x >= 2) return false;
@@ -333,7 +310,6 @@ namespace MyGame.Match
             return true;
         }
 
-        /// <summary>All cells in row y, columns xMin..xMax-1 are free?</summary>
         private static bool IsRowFree(bool[,] occupied, int y, int xMin, int xMax)
         {
             if (y < 0 || y >= 2) return false;
@@ -342,15 +318,10 @@ namespace MyGame.Match
             return true;
         }
 
-        /// <summary>
-        /// Can a 2×2 block anchored at (ax, ay) be claimed?
-        /// The anchor is the bottom-left of the 2×2 window.
-        /// </summary>
         private static bool CanClaim2x2(bool[,] occupied, int ax, int ay,
             out (int xMin, int xMax, int yMin, int yMax, CubeShape.BlockKind kind) result)
         {
             result = default;
-
             if (ax < 0 || ay < 0) return false;
             if (ax + 2 > 2 || ay + 2 > 2) return false;
 
@@ -396,19 +367,7 @@ namespace MyGame.Match
                 {
                     float cs = cube.Shape.CellSize;
                     finalSub.SlotPivot.localPosition = new Vector3(
-                        (center.x - 0.5f) * cs,
-                        0f,
-                        (center.y - 0.5f) * cs
-                    );
-                }
-                else
-                {
-                    float cs = cube.Shape.CellSize;
-                    finalSub.transform.localPosition = new Vector3(
-                        (center.x - 0.5f) * cs,
-                        0f,
-                        (center.y - 0.5f) * cs
-                    );
+                        (center.x - 0.5f) * cs, 0f, (center.y - 0.5f) * cs);
                 }
             }
 

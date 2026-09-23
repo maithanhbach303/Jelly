@@ -1,5 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
+using MyGame.Interaction;
+using MyGame.Tray;
 
 namespace MyGame.Board
 {
@@ -61,11 +63,47 @@ namespace MyGame.Board
             OnBoardBuilt?.Invoke(board);
         }
 
-        public void Clear()
+       public void Clear()
         {
-            foreach (var c in _cells.Values) if (c) Destroy(c);
+            // 0. Release any in-flight drag
+            var dragController = FindFirstObjectByType<DragController>();
+            dragController?.CancelDrag();
+
+            // 1. Destroy tracked cells
+            foreach (var c in _cells.Values)
+                if (c) Destroy(c);
             _cells.Clear();
+
+            // 2. Destroy tracked board cubes.
+            //    Snapshot first, because CleanupForDestroy() → Release() would
+            //    otherwise mutate _occupied mid-enumeration.
+            var occupiedSnapshot = new List<GameObject>(_occupied.Values);
             _occupied.Clear();
+
+            for (int i = 0; i < occupiedSnapshot.Count; i++)
+            {
+                var cubeGO = occupiedSnapshot[i];
+                if (cubeGO == null) continue;
+
+                if (cubeGO.TryGetComponent(out DraggableCube cube))
+                    cube.CleanupForDestroy();
+
+                Destroy(cubeGO);
+            }
+
+            // 3. Sweep leftover board cubes (skip any parented under a tray)
+            var leftovers = FindObjectsByType<DraggableCube>(FindObjectsSortMode.None);
+            for (int i = 0; i < leftovers.Length; i++)
+            {
+                var cube = leftovers[i];
+                if (cube == null) continue;
+                if (cube.GetComponentInParent<CubeTray>() != null) continue;
+
+                cube.CleanupForDestroy();
+                Destroy(cube.gameObject);
+            }
+
+            // 4. Clear the sub-grid
             SubGrid?.Clear();
         }
 

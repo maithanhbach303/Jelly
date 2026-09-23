@@ -427,6 +427,30 @@ namespace MyGame.Interaction
             }
         }
 
+        public void CleanupForDestroy()
+        {
+            // If we're on a cell, simulate the normal "removed from board" flow
+            // so subscribers release their references.
+            if (_occupiedCell.HasValue && _grid != null)
+            {
+                UnregisterSubCubes();
+                _grid.Release(_occupiedCell.Value, gameObject);
+                _occupiedCell = null;
+
+                OnRemovedFromBoard?.Invoke(this);
+            }
+
+            // Stop any running snap / pulse coroutines
+            StopAllCoroutines();
+
+            // Destroy the ghost preview if it still exists
+            if (_ghost != null)
+            {
+                Destroy(_ghost);
+                _ghost = null;
+            }
+        }
+
         #endregion
     }
 }

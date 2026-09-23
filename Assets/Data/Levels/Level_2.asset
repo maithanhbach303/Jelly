@@ -1,0 +1,26 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: f4e2f7252cd0d8844bbbb7b829aae68d, type: 3}
+  m_Name: Level_2
+  m_EditorClassIdentifier: 
+  levelName: Level 2
+  description: 
+  thumbnail: {fileID: 0}
+  difficulty: 1
+  board: {fileID: 11400000, guid: a3e171cff2d512c4e83cab4e9e3126bc, type: 2}
+  shapePool: {fileID: 11400000, guid: 53a0e698d25b3984e9b495ee3c7b24e0, type: 2}
+  palette: {fileID: 11400000, guid: 6f0f04b50c8dc604facc7433ec04bc05, type: 2}
+  minMatchSize: 2
+  stockCount: -1
+  respawnDelay: 0.15
+  goals:
+  - {fileID: 11400000, guid: ac5a2fda5de2fa74dabbdcf9487b6a22, type: 2}

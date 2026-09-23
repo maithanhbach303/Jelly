@@ -19,6 +19,11 @@ namespace MyGame.Interaction
     ///  - Shape's transform is never rotated (world-aligned axes).
     ///  - Each slot gets a rotation-free pivot; only the sub-cube itself may be rotated.
     ///  - Slot positions are in cell units: (0,0) bottom-left, (1,1) top-right.
+    ///
+    /// Color:
+    ///  - The assigned CubePalette is the SINGLE SOURCE OF TRUTH for available colors.
+    ///  - Each sub-cube is dealt a color drawn from palette.Entries at build time.
+    ///  - No color state is stored on the shape itself.
     /// </summary>
     public class CubeShape : MonoBehaviour
     {
@@ -46,20 +51,9 @@ namespace MyGame.Interaction
         [Tooltip("If true, placement is randomized each build. If false, the default authored layout is used.")]
         [SerializeField] private bool randomizePlacement = true;
 
-        [Header("Color (configured by tray at spawn)")]
+        [Header("Color (assigned by tray at spawn)")]
+        [Tooltip("Palette used to resolve CubeColor → Color. The shape deals sub-cube colors from this.")]
         [SerializeField] private CubePalette palette;
-        [SerializeField] private CubeColor shapeColor = CubeColor.None;
-        [SerializeField] private bool randomizePerSlotColor = false;
-
-        [SerializeField]
-        private CubeColor[] colorPool =
-        {
-            CubeColor.Red,
-            CubeColor.Blue,
-            CubeColor.Green,
-            CubeColor.Yellow,
-            CubeColor.Purple,
-        };
 
         #endregion
 
@@ -75,7 +69,6 @@ namespace MyGame.Interaction
         public Vector3 WorldSize => new Vector3(cellSize, cellSize, cellSize);
         public Vector3 LocalCenter => new Vector3(0f, cellSize * 0.5f, 0f);
         public IReadOnlyList<SubCube> Blocks => _spawned;
-        public CubeColor ShapeColor => shapeColor;
         public CubePalette Palette => palette;
 
         /// <summary>True while Build() is executing. Used by the growth resolver to skip mid-rebuild shapes.</summary>
@@ -96,18 +89,14 @@ namespace MyGame.Interaction
                 if (_spawned[i] != null) _spawned[i].SetPalette(p);
         }
 
+        /// <summary>
+        /// Sets a single color on all currently-spawned sub-cubes. Does not affect
+        /// subsequent builds — those always deal from the palette.
+        /// </summary>
         public void SetColor(CubeColor color)
         {
-            shapeColor = color;
-            randomizePerSlotColor = false;
             for (int i = 0; i < _spawned.Count; i++)
                 if (_spawned[i] != null) _spawned[i].SetColor(color);
-        }
-
-        public void SetRandomPerSlotColors(CubeColor[] pool)
-        {
-            if (pool != null && pool.Length > 0) colorPool = pool;
-            randomizePerSlotColor = true;
         }
 
         public void SetShape(CubeShapeType type)
@@ -231,9 +220,8 @@ namespace MyGame.Interaction
 
                 var slots = BuildSlotLayout(shapeType);
 
-                CubeColor[] dealt = null;
-                if (randomizePerSlotColor)
-                    dealt = DealUniqueColors(slots.Count);
+                // Deal one color per slot, drawn from the palette.
+                CubeColor[] dealt = DealColorsFromPalette(slots.Count);
 
                 int dealtIndex = 0;
                 Vector2 shapeCenter = ShapeSize * 0.5f;
@@ -263,12 +251,7 @@ namespace MyGame.Interaction
                     if (go.TryGetComponent(out SubCube sub))
                     {
                         sub.Initialize(this, slot.center, slot.size, palette);
-
-                        CubeColor assigned = randomizePerSlotColor && dealt != null
-                            ? dealt[dealtIndex++]
-                            : shapeColor;
-
-                        sub.SetColor(assigned);
+                        sub.SetColor(dealt[dealtIndex++]);
                         _spawned.Add(sub);
                     }
                     else
@@ -479,20 +462,54 @@ namespace MyGame.Interaction
 
         #region Color Dealing
 
-        private CubeColor[] DealUniqueColors(int count)
+        /// <summary>
+        /// Deal one CubeColor per slot, drawn from the assigned palette's entries.
+        /// If there are more slots than palette entries, the bag refills on exhaustion
+        /// (repeat colors are unavoidable, so we log once per build).
+        /// </summary>
+        private CubeColor[] DealColorsFromPalette(int count)
         {
             var result = new CubeColor[count];
             if (count == 0) return result;
 
-            var pool = (colorPool != null && colorPool.Length > 0)
-                ? colorPool
-                : new[] { shapeColor };
+            // Build the source list from the palette — the single source of truth
+            var source = new List<CubeColor>(8);
+            if (palette != null && palette.Entries != null)
+            {
+                for (int i = 0; i < palette.Entries.Count; i++)
+                {
+                    var c = palette.Entries[i].color;
+                    if (c != CubeColor.None) source.Add(c);
+                }
+            }
 
-            var bag = new List<CubeColor>(pool);
+            if (source.Count == 0)
+            {
+                Debug.LogWarning(
+                    $"[CubeShape '{name}'] No colors available from palette " +
+                    $"{(palette == null ? "(palette is null)" : $"'{palette.name}'")}. " +
+                    $"Dealing White to all {count} slots.",
+                    this
+                );
 
+                for (int i = 0; i < count; i++) result[i] = CubeColor.None;
+                return result;
+            }
+
+            if (source.Count < count)
+            {
+                Debug.LogWarning(
+                    $"[CubeShape '{name}'] Shape has {count} slots but palette " +
+                    $"'{palette.name}' has only {source.Count} distinct colors. Repeats will appear.",
+                    this
+                );
+            }
+
+            var bag = new List<CubeColor>(source);
             for (int i = 0; i < count; i++)
             {
-                if (bag.Count == 0) bag.AddRange(pool);
+                if (bag.Count == 0)
+                    bag.AddRange(source);   // refill on exhaustion
 
                 int pick = Random.Range(0, bag.Count);
                 result[i] = bag[pick];
