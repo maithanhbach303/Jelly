@@ -72,7 +72,9 @@ namespace MyGame.UI
 
         private void Start()
         {
-            // HideAll();
+            // LevelLoader loads its initial level in Awake, before this UI subscribes.
+            if (levelLoader != null && levelLoader.CurrentLevel != null)
+                HandleLevelLoaded(levelLoader.CurrentLevel);
         }
 
         #endregion

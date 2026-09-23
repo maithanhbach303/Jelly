@@ -65,4 +65,4 @@ MonoBehaviour:
     rotationQuarterTurns: 0
     colors: 07000000
     paletteOverride: {fileID: 0}
-  traySequence: {fileID: 0}
+  traySequence: {fileID: 11400000, guid: b7a9dc13ba939d540b11b8e17f1a45a7, type: 2}
