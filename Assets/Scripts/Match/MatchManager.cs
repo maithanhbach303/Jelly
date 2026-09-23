@@ -18,6 +18,10 @@ namespace MyGame.Match
         [Header("Merge Animation")]
         [SerializeField] private MergeAnimator mergeAnimator;
 
+        [Header("Audio")]
+        [SerializeField] private AudioClip matchPopClip;
+        [Range(0f, 1f)] [SerializeField] private float matchPopVolume = 1f;
+
         private SubCubeMatchDetector _detector;
         private SubCubeGrowthResolver _resolver;
         private bool _initialized;
@@ -163,7 +167,14 @@ namespace MyGame.Match
         {
             int removed = 0;
             yield return _resolver.ResolveAll(grid, minMatchSize, r => removed = r);
+            if (removed > 0) PlayMatchPop();
             ResolveCompleted?.Invoke(removed);
+        }
+
+        private void PlayMatchPop()
+        {
+            if (matchPopClip == null) return;
+            AudioSource.PlayClipAtPoint(matchPopClip, grid != null ? grid.transform.position : transform.position, matchPopVolume);
         }
 
         #endregion

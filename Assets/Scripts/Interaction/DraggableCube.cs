@@ -24,6 +24,10 @@ namespace MyGame.Interaction
         [SerializeField] private float landingPulseDuration = 0.18f;
         [Range(0f, 0.6f)] [SerializeField] private float landingSquash = 0.25f;
 
+        [Header("Audio")]
+        [SerializeField] private AudioClip placementPopClip;
+        [Range(0f, 1f)] [SerializeField] private float placementPopVolume = 1f;
+
         [Header("Ghost Preview")]
         [SerializeField] private GameObject ghostPrefab;
         [SerializeField] private Color validTint = new(0.3f, 1f, 0.4f, 0.45f);
@@ -78,7 +82,7 @@ namespace MyGame.Interaction
 
         #region Accessors
 
-        public bool CanDrag => _canDrag && !_dragging && !_snapping;
+        public bool CanDrag => _canDrag && !_dragging && !_snapping && !_occupiedCell.HasValue;
         public bool IsPlaced => _occupiedCell.HasValue;
         public Vector2Int? OccupiedCell => _occupiedCell;
         public CubeShape Shape => shape;
@@ -558,6 +562,8 @@ namespace MyGame.Interaction
 
                     RegisterSubCubes(grid);
 
+                    PlayPlacementPop();
+
                     if (fireEvents) OnPlacedOnBoard?.Invoke(this);
 
                     if (playPulse)
@@ -578,6 +584,12 @@ namespace MyGame.Interaction
             }
 
             ReturnHome();
+        }
+
+        private void PlayPlacementPop()
+        {
+            if (placementPopClip == null) return;
+            AudioSource.PlayClipAtPoint(placementPopClip, transform.position, placementPopVolume);
         }
 
         private void ReturnHome()

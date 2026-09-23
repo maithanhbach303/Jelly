@@ -3769,6 +3769,8 @@ MonoBehaviour:
   minMatchSize: 2
   autoResolve: 1
   mergeAnimator: {fileID: 1852706012}
+  matchPopClip: {fileID: 8300000, guid: 694765cc0663cce4c8783e6e3ea31994, type: 3}
+  matchPopVolume: 1
 --- !u!114 &1852706012
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -3781,7 +3783,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b34dee2f177e94b4d9cb09bfc61e5690, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  mergeDuration: 0.22
+  mergeDuration: 0.5
   popDuration: 0
   endScaleFactor: 0
   popScale: 1.6
@@ -4018,6 +4020,7 @@ MonoBehaviour:
   goalSystem: {fileID: 1715656568}
   trayManager: {fileID: 1478598922}
   gridManager: {fileID: 558107563}
+  matchManager: {fileID: 0}
   hudPanel: {fileID: 296441563}
   levelNameText: {fileID: 196520094}
   trayStockText: {fileID: 0}
