@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using MyGame.Board;
 using MyGame.Interaction;
 using MyGame.Tray;
@@ -34,6 +35,7 @@ namespace MyGame.Levels
         #region Runtime State
 
         private int _currentIndex = -1;
+        private static int _sceneReloadLevelIndex = -1;
         public LevelDefinition CurrentLevel =>
             (_currentIndex >= 0 && _currentIndex < levels.Length) ? levels[_currentIndex] : null;
 
@@ -48,8 +50,13 @@ namespace MyGame.Levels
 
         private void Awake()
         {
-            if (startIndex >= 0 && startIndex < LevelCount)
-                LoadIndex(startIndex);
+            int initialIndex = _sceneReloadLevelIndex >= 0
+                ? _sceneReloadLevelIndex
+                : startIndex;
+            _sceneReloadLevelIndex = -1;
+
+            if (initialIndex >= 0 && initialIndex < LevelCount)
+                LoadIndex(initialIndex);
         }
 
         #endregion
@@ -82,12 +89,18 @@ namespace MyGame.Levels
         public void LoadNext()
         {
             if (LevelCount == 0) return;
-            LoadIndex((_currentIndex + 1) % LevelCount);
+            ReloadSceneAtIndex((_currentIndex + 1) % LevelCount);
         }
 
         public void ReloadCurrent()
         {
-            if (_currentIndex >= 0) LoadIndex(_currentIndex);
+            if (_currentIndex >= 0) ReloadSceneAtIndex(_currentIndex);
+        }
+
+        private void ReloadSceneAtIndex(int levelIndex)
+        {
+            _sceneReloadLevelIndex = levelIndex;
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
 
         #endregion

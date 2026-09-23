@@ -43,14 +43,14 @@ MonoBehaviour:
   - cell: {x: 4, y: 2}
     shapeType: 3
     rotationQuarterTurns: 3
-    colors: 040000000400000008000000
+    colors: 040000000300000008000000
     paletteOverride: {fileID: 0}
   - cell: {x: 2, y: 3}
     shapeType: 3
     rotationQuarterTurns: 3
     colors: 050000000300000007000000
     paletteOverride: {fileID: 0}
-  - cell: {x: 4, y: 4}
+  - cell: {x: 3, y: 3}
     shapeType: 3
     rotationQuarterTurns: 3
     colors: 080000000300000007000000
