@@ -11,25 +11,10 @@ namespace MyGame.Interaction
         HalfAndTwoSmall,
     }
 
-    /// <summary>
-    /// Builds a single-cell cube layout from pre-sized sub-cube prefabs.
-    ///
-    /// Conventions:
-    ///  - Shape pivot is at the BOTTOM-CENTER of the cell footprint.
-    ///  - Shape's transform is never rotated (world-aligned axes).
-    ///  - Each slot gets a rotation-free pivot; only the sub-cube itself may be rotated.
-    ///  - Slot positions are in cell units: (0,0) bottom-left, (1,1) top-right.
-    ///
-    /// Color:
-    ///  - The assigned CubePalette is the SINGLE SOURCE OF TRUTH for available colors.
-    ///  - Each sub-cube is dealt a color drawn from palette.Entries at build time.
-    ///  - No color state is stored on the shape itself.
-    /// </summary>
     public class CubeShape : MonoBehaviour
     {
         #region Nested Types
 
-        /// <summary>Kind of block occupying a slot. Determines footprint, ray count, etc.</summary>
         public enum BlockKind { Whole, Half, Small }
 
         #endregion
@@ -44,15 +29,10 @@ namespace MyGame.Interaction
         [Header("Shape")]
         [SerializeField] private CubeShapeType shapeType = CubeShapeType.Whole;
         [SerializeField] private float cellSize = 1f;
-
-        [Tooltip("If true, halves are randomly oriented horizontally or vertically.")]
         [SerializeField] private bool randomizeHalfOrientation = true;
-
-        [Tooltip("If true, placement is randomized each build. If false, the default authored layout is used.")]
         [SerializeField] private bool randomizePlacement = true;
 
-        [Header("Color (assigned by tray at spawn)")]
-        [Tooltip("Palette used to resolve CubeColor → Color. The shape deals sub-cube colors from this.")]
+        [Header("Color")]
         [SerializeField] private CubePalette palette;
 
         #endregion
@@ -62,6 +42,7 @@ namespace MyGame.Interaction
         private readonly List<SubCube> _spawned = new();
         private bool _built;
         private bool _isBuilding;
+        private bool _initialized;
 
         public CubeShapeType ShapeType => shapeType;
         public float CellSize => cellSize;
@@ -70,8 +51,6 @@ namespace MyGame.Interaction
         public Vector3 LocalCenter => new Vector3(0f, cellSize * 0.5f, 0f);
         public IReadOnlyList<SubCube> Blocks => _spawned;
         public CubePalette Palette => palette;
-
-        /// <summary>True while Build() is executing. Used by the growth resolver to skip mid-rebuild shapes.</summary>
         public bool IsBuilding => _isBuilding;
 
         public event System.Action<CubeShape> OnShapeChanged;
@@ -89,10 +68,8 @@ namespace MyGame.Interaction
                 if (_spawned[i] != null) _spawned[i].SetPalette(p);
         }
 
-        /// <summary>
-        /// Sets a single color on all currently-spawned sub-cubes. Does not affect
-        /// subsequent builds — those always deal from the palette.
-        /// </summary>
+        public void SetRandomizePlacement(bool value) => randomizePlacement = value;
+
         public void SetColor(CubeColor color)
         {
             for (int i = 0; i < _spawned.Count; i++)
@@ -101,6 +78,7 @@ namespace MyGame.Interaction
 
         public void SetShape(CubeShapeType type)
         {
+            _initialized = true;
             shapeType = type;
             Build();
         }
@@ -112,25 +90,15 @@ namespace MyGame.Interaction
             OnShapeChanged?.Invoke(this);
         }
 
-        /// <summary>
-        /// Infers the block kind from a slot's footprint size (in cell units).
-        /// Used by the growth resolver to decide what a slot has become.
-        /// </summary>
         public static BlockKind KindFromSlotSize(Vector2 size)
         {
             bool fullX = Mathf.Approximately(size.x, 1f);
             bool fullY = Mathf.Approximately(size.y, 1f);
-
             if (fullX && fullY) return BlockKind.Whole;
             if (!fullX && !fullY) return BlockKind.Small;
             return BlockKind.Half;
         }
 
-        /// <summary>
-        /// Replaces a sub-cube with a new one of the target kind, reusing the same pivot.
-        /// Returns the new SubCube, or null on failure.
-        /// Used by the growth resolver when a surviving sub-cube grows into a freed slot.
-        /// </summary>
         public SubCube ReplaceSubCube(SubCube oldSub, BlockKind newKind, Vector2 newCenter, Vector2 newSize, int yaw)
         {
             if (oldSub == null) return null;
@@ -141,7 +109,6 @@ namespace MyGame.Interaction
             Transform oldPivot = oldSub.SlotPivot != null ? oldSub.SlotPivot : oldSub.transform.parent;
             CubeColor oldColor = oldSub.CurrentColor;
 
-            // Remove old sub-cube (but keep the pivot)
             Object.Destroy(oldSub.gameObject);
             _spawned.RemoveAt(index);
 
@@ -152,7 +119,6 @@ namespace MyGame.Interaction
                 return null;
             }
 
-            // Reuse the pivot or create one
             Transform pivot = oldPivot;
             if (pivot == null)
             {
@@ -161,17 +127,11 @@ namespace MyGame.Interaction
                 pivot = pivotGO.transform;
             }
 
-            // Position the pivot for the new slot
             float cs = cellSize;
-            pivot.localPosition = new Vector3(
-                (newCenter.x - 0.5f) * cs,
-                0f,
-                (newCenter.y - 0.5f) * cs
-            );
+            pivot.localPosition = new Vector3((newCenter.x - 0.5f) * cs, 0f, (newCenter.y - 0.5f) * cs);
             pivot.localRotation = Quaternion.identity;
             pivot.localScale = Vector3.one;
 
-            // Instantiate the new sub-cube
             GameObject go = Instantiate(prefab, pivot);
             go.transform.localPosition = Vector3.zero;
             go.transform.localRotation = Quaternion.Euler(0f, yaw * 90f, 0f);
@@ -179,7 +139,7 @@ namespace MyGame.Interaction
 
             if (!go.TryGetComponent(out SubCube newSub))
             {
-                Debug.LogWarning($"[CubeShape] ReplaceSubCube: prefab '{prefab.name}' has no SubCube component.");
+                Debug.LogWarning($"[CubeShape] ReplaceSubCube: prefab '{prefab.name}' has no SubCube.");
                 Object.Destroy(go);
                 return null;
             }
@@ -198,7 +158,6 @@ namespace MyGame.Interaction
 
         private void Awake()
         {
-            // Guarantee a clean world-aligned frame
             transform.localRotation = Quaternion.identity;
         }
 
@@ -206,10 +165,10 @@ namespace MyGame.Interaction
         {
             if (_isBuilding) return;
             _isBuilding = true;
+            _initialized = true;
             try
             {
                 transform.localRotation = Quaternion.identity;
-
                 Clear();
 
                 if (wholeCube == null || halfCube == null || smallCube == null)
@@ -219,8 +178,6 @@ namespace MyGame.Interaction
                 }
 
                 var slots = BuildSlotLayout(shapeType);
-
-                // Deal one color per slot, drawn from the palette.
                 CubeColor[] dealt = DealColorsFromPalette(slots.Count);
 
                 int dealtIndex = 0;
@@ -231,7 +188,6 @@ namespace MyGame.Interaction
                     GameObject prefab = PickPrefab(slot.kind);
                     if (prefab == null) continue;
 
-                    // Rotation-free pivot at the slot position
                     var pivot = new GameObject($"Slot_{slot.kind}_{slot.center.x}_{slot.center.y}");
                     pivot.transform.SetParent(transform, worldPositionStays: false);
                     pivot.transform.localPosition = new Vector3(
@@ -242,7 +198,6 @@ namespace MyGame.Interaction
                     pivot.transform.localRotation = Quaternion.identity;
                     pivot.transform.localScale = Vector3.one;
 
-                    // Sub-cube under the pivot
                     GameObject go = Instantiate(prefab, pivot.transform);
                     go.transform.localPosition = Vector3.zero;
                     go.transform.localRotation = Quaternion.Euler(0f, slot.yaw * 90f, 0f);
@@ -404,7 +359,6 @@ namespace MyGame.Interaction
 
             var options = new List<Slot>(4);
 
-            // Horizontal halves (span X): occupy a full sub-row
             for (int y = 0; y < 2; y++)
             {
                 if (!taken[0, y] && !taken[1, y])
@@ -418,7 +372,6 @@ namespace MyGame.Interaction
                 }
             }
 
-            // Vertical halves (span Z): occupy a full sub-column
             for (int x = 0; x < 2; x++)
             {
                 if (!taken[x, 0] && !taken[x, 1])
@@ -462,17 +415,11 @@ namespace MyGame.Interaction
 
         #region Color Dealing
 
-        /// <summary>
-        /// Deal one CubeColor per slot, drawn from the assigned palette's entries.
-        /// If there are more slots than palette entries, the bag refills on exhaustion
-        /// (repeat colors are unavoidable, so we log once per build).
-        /// </summary>
         private CubeColor[] DealColorsFromPalette(int count)
         {
             var result = new CubeColor[count];
             if (count == 0) return result;
 
-            // Build the source list from the palette — the single source of truth
             var source = new List<CubeColor>(8);
             if (palette != null && palette.Entries != null)
             {
@@ -485,32 +432,14 @@ namespace MyGame.Interaction
 
             if (source.Count == 0)
             {
-                Debug.LogWarning(
-                    $"[CubeShape '{name}'] No colors available from palette " +
-                    $"{(palette == null ? "(palette is null)" : $"'{palette.name}'")}. " +
-                    $"Dealing White to all {count} slots.",
-                    this
-                );
-
                 for (int i = 0; i < count; i++) result[i] = CubeColor.None;
                 return result;
-            }
-
-            if (source.Count < count)
-            {
-                Debug.LogWarning(
-                    $"[CubeShape '{name}'] Shape has {count} slots but palette " +
-                    $"'{palette.name}' has only {source.Count} distinct colors. Repeats will appear.",
-                    this
-                );
             }
 
             var bag = new List<CubeColor>(source);
             for (int i = 0; i < count; i++)
             {
-                if (bag.Count == 0)
-                    bag.AddRange(source);   // refill on exhaustion
-
+                if (bag.Count == 0) bag.AddRange(source);
                 int pick = Random.Range(0, bag.Count);
                 result[i] = bag[pick];
                 bag.RemoveAt(pick);
@@ -525,6 +454,7 @@ namespace MyGame.Interaction
 
         private void Start()
         {
+            if (_initialized) return;
             if (!_built) Build();
         }
 

@@ -4,22 +4,17 @@ using MyGame.Interaction;
 
 namespace MyGame.Board
 {
-    /// <summary>
-    /// The finest-resolution grid of the board. Each big-grid cell is subdivided
-    /// into a 2×2 sub-grid (smallest sub-cube is 0.5 cells).
-    /// </summary>
     public class BoardSubGrid
     {
         public const int SubCellsPerCell = 2;
 
         public int CellWidth  { get; private set; }
         public int CellHeight { get; private set; }
-
         public int SubWidth  => CellWidth  * SubCellsPerCell;
         public int SubHeight => CellHeight * SubCellsPerCell;
 
         private SubCube[,] _grid;
-        private readonly Dictionary<SubCube, List<Vector2Int>> _registeredCells = new();
+        private readonly Dictionary<SubCube, List<Vector2Int>> _registered = new();
 
         public BoardSubGrid(int cellWidth, int cellHeight)
         {
@@ -28,11 +23,10 @@ namespace MyGame.Board
 
         public void Resize(int cellWidth, int cellHeight)
         {
-            CellWidth  = Mathf.Max(1, cellWidth);
+            CellWidth = Mathf.Max(1, cellWidth);
             CellHeight = Mathf.Max(1, cellHeight);
-
             _grid = new SubCube[SubWidth, SubHeight];
-            _registeredCells.Clear();
+            _registered.Clear();
         }
 
         public void Clear()
@@ -43,12 +37,15 @@ namespace MyGame.Board
                     for (int y = 0; y < SubHeight; y++)
                         _grid[x, y] = null;
             }
-            _registeredCells.Clear();
+            _registered.Clear();
         }
+
+        #region Registration
 
         public void Register(SubCube sub, Vector2Int cell, Vector2 slotPosition, Vector2 slotSize)
         {
-            if (sub == null || _grid == null) return;
+            if (sub == null) return;
+            if (_grid == null) return;
 
             Vector2 half = slotSize * 0.5f;
             Vector2 lowerLeft = slotPosition - half;
@@ -59,8 +56,7 @@ namespace MyGame.Board
             {
                 Debug.LogWarning(
                     $"[BoardSubGrid] Slot out of cell bounds: pos={slotPosition} size={slotSize}",
-                    sub
-                );
+                    sub);
                 return;
             }
 
@@ -72,7 +68,7 @@ namespace MyGame.Board
             int baseX = cell.x * SubCellsPerCell;
             int baseY = cell.y * SubCellsPerCell;
 
-            var list = new List<Vector2Int>(4);
+            var cells = new List<Vector2Int>(4);
 
             for (int x = xMin; x < xMax; x++)
             {
@@ -85,17 +81,17 @@ namespace MyGame.Board
                     if (gy < 0 || gy >= SubHeight) continue;
 
                     _grid[gx, gy] = sub;
-                    list.Add(new Vector2Int(gx, gy));
+                    cells.Add(new Vector2Int(gx, gy));
                 }
             }
 
-            _registeredCells[sub] = list;
+            _registered[sub] = cells;
         }
 
         public void Unregister(SubCube sub)
         {
             if (sub == null) return;
-            if (!_registeredCells.TryGetValue(sub, out var cells)) return;
+            if (!_registered.TryGetValue(sub, out var cells)) return;
 
             for (int i = 0; i < cells.Count; i++)
             {
@@ -105,8 +101,12 @@ namespace MyGame.Board
                         _grid[c.x, c.y] = null;
             }
 
-            _registeredCells.Remove(sub);
+            _registered.Remove(sub);
         }
+
+        #endregion
+
+        #region Queries
 
         public SubCube Get(int x, int y)
         {
@@ -118,8 +118,10 @@ namespace MyGame.Board
 
         public IEnumerable<SubCube> AllSubCubes()
         {
-            foreach (var kvp in _registeredCells)
+            foreach (var kvp in _registered)
                 if (kvp.Key != null) yield return kvp.Key;
         }
+
+        #endregion
     }
 }

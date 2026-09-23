@@ -42,6 +42,13 @@ namespace MyGame.Interaction
             if (_lookup == null) BuildLookup();
         }
 
+        public bool HasEntry(CubeColor color)
+        {
+            if (color == CubeColor.None) return false;
+            EnsureLookup();
+            return _lookup.ContainsKey(color);
+        }
+
         public Color GetRGB(CubeColor color)
         {
             // None means "no color assigned" — return a neutral gray rather than magenta,

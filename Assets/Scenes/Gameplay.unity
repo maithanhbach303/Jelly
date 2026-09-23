@@ -1636,6 +1636,14 @@ MonoBehaviour:
   board: {fileID: 11400000, guid: 7cfc3b691cee4764c9d1def73d09ef73, type: 2}
   cellPrefab: {fileID: 636551401543353689, guid: 4356090a05d9268409baa8bca4530b4b, type: 3}
   validCellMat: {fileID: 0}
+  holeMat: {fileID: 0}
+  autoCenterOnBuild: 1
+  centerInFrontOfCamera: 0
+  autoFitToScreen: 1
+  fitPadding: 0.15
+  shrinkOnly: 1
+  fitStrategy: 0
+  targetCamera: {fileID: 0}
 --- !u!4 &558107564
 Transform:
   m_ObjectHideFlags: 0
@@ -2690,6 +2698,7 @@ Transform:
   - {fileID: 1852706010}
   - {fileID: 1715656567}
   - {fileID: 2011207021}
+  - {fileID: 2063836948}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1206222350
@@ -3394,7 +3403,7 @@ MonoBehaviour:
   defaultPalette: {fileID: 11400000, guid: 63fc5a67784b6434a88113e5e1fca544, type: 2}
   defaultStockCount: -1
   defaultRespawnDelay: 0.15
-  logTrayEvents: 1
+  sharedSequence: {fileID: 0}
 --- !u!1 &1488911142
 GameObject:
   m_ObjectHideFlags: 0
@@ -3864,11 +3873,13 @@ MonoBehaviour:
   trayManager: {fileID: 1478598922}
   matchManager: {fileID: 1852706011}
   goalSystem: {fileID: 1715656568}
+  prefillSpawner: {fileID: 2063836949}
   levels:
   - {fileID: 11400000, guid: 9f3d3de776ca7754fadd6cd404c5373e, type: 2}
   - {fileID: 11400000, guid: f584fa5421fe62c46b86126075e5d4f1, type: 2}
   - {fileID: 11400000, guid: cbbca52f42a6acd4eb29fb3bfd8a8ef4, type: 2}
   startIndex: 0
+  logPrefillColors: 0
 --- !u!4 &1715656567
 Transform:
   m_ObjectHideFlags: 0
@@ -4272,7 +4283,7 @@ MonoBehaviour:
   grid: {fileID: 558107563}
   minMatchSize: 2
   autoResolve: 1
-  mergeAnimator: {fileID: 0}
+  mergeAnimator: {fileID: 1852706012}
 --- !u!114 &1852706012
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -4536,8 +4547,54 @@ MonoBehaviour:
   loseTitleText: {fileID: 1275583561}
   loseRetryButton: {fileID: 133375637}
   loseMenuButton: {fileID: 1488911144}
-  rootCanvasGroup: {fileID: 0}
-  fadeDuration: 0.25
+--- !u!1 &2063836947
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 2063836948}
+  - component: {fileID: 2063836949}
+  m_Layer: 0
+  m_Name: Prefilled Cube Spawner
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &2063836948
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2063836947}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 1150537718}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &2063836949
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2063836947}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 316c06f26a3769c48ab7179160c83303, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cubePrefab: {fileID: 2723131392848585598, guid: 6446225d2ad203a479ecb894b96143ee, type: 3}
+  gridManager: {fileID: 558107563}
+  playLandingPulse: 0
+  logSpawns: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

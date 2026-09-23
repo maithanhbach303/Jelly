@@ -1,12 +1,13 @@
 using UnityEngine;
 using MyGame.Board;
+using MyGame.Levels;
 
 namespace MyGame.Interaction
 {
     [RequireComponent(typeof(BoxCollider))]
     public class DraggableCube : MonoBehaviour, IDraggable
     {
-        #region Inspector Fields
+        #region Inspector
 
         [Header("Shape")]
         [SerializeField] private CubeShape shape;
@@ -16,19 +17,24 @@ namespace MyGame.Interaction
         [SerializeField] private float dragSmoothTime = 0.06f;
         [SerializeField] private float snapSmoothTime = 0.14f;
 
-        [Header("Placement Scale")]
         [Range(0.5f, 1.0f)]
         [SerializeField] private float placedFitRatio = 1.0f;
 
         [Header("Landing Pulse")]
         [SerializeField] private float landingPulseDuration = 0.18f;
-        [Range(0f, 0.6f)]
-        [SerializeField] private float landingSquash = 0.25f;
+        [Range(0f, 0.6f)] [SerializeField] private float landingSquash = 0.25f;
 
         [Header("Ghost Preview")]
         [SerializeField] private GameObject ghostPrefab;
-        [SerializeField] private Color validTint   = new(0.3f, 1f, 0.4f, 0.45f);
+        [SerializeField] private Color validTint = new(0.3f, 1f, 0.4f, 0.45f);
         [SerializeField] private Color invalidTint = new(1f, 0.3f, 0.3f, 0.45f);
+
+        #endregion
+
+        #region Ownership Flags
+
+        [HideInInspector] public bool IsPrefilled = false;
+        [HideInInspector] public bool IsTrayOwned = false;
 
         #endregion
 
@@ -45,44 +51,36 @@ namespace MyGame.Interaction
         private bool _dragging;
         private bool _snapping;
         private bool _pulseActive;
+        private bool _canDrag = true;
+        private bool _initialized;
 
         private Vector3 _dragTarget;
         private Vector3 _snapTargetPosition;
         private Vector3 _snapTargetScale;
-        private float _snapStartTime;
-
         private Vector3 _dragVelocity;
         private Vector3 _snapVelocity;
         private Vector3 _scaleVelocity;
 
-        // Safety: force-finish a snap if it takes longer than this (in case a coroutine stalls).
-        private const float SnapTimeoutSeconds = 2f;
+        // --- Pending sequence spec (applied after every shape.Build) ---
+        private bool _hasPendingSpec;
+        private TraySequence.CubeSpec _pendingSpec;
+        private CubePalette _pendingSpecPalette;
 
         #endregion
 
-        #region Public Accessors
+        #region Accessors
 
-        /// <summary>
-        /// False while dragging, while snapping, or when this cube is already placed on the board.
-        /// Placed cubes are locked in place — they leave the board only via match resolution.
-        /// </summary>
-        public bool CanDrag => !_dragging && !_snapping && !IsPlaced;
-
+        public bool CanDrag => _canDrag && !_dragging && !_snapping;
         public bool IsPlaced => _occupiedCell.HasValue;
         public Vector2Int? OccupiedCell => _occupiedCell;
         public CubeShape Shape => shape;
-
-        /// <summary>Frame when this cube was last placed. Used by cleanup guards.</summary>
-        public int PlacedFrame { get; private set; } = -1;
+        public bool HasPendingSpec => _hasPendingSpec;
 
         #endregion
 
         #region Events
 
-        /// <summary>Fires after a successful placement (sub-cubes registered, snap started).</summary>
         public event System.Action<DraggableCube> OnPlacedOnBoard;
-
-        /// <summary>Fires if this cube is ever removed from the board (currently only via external code).</summary>
         public event System.Action<DraggableCube> OnRemovedFromBoard;
 
         #endregion
@@ -96,6 +94,12 @@ namespace MyGame.Interaction
 
         private void Start()
         {
+            if (_initialized) return;
+            Initialize();
+        }
+
+        private void Initialize()
+        {
             _grid = FindFirstObjectByType<GridManager>();
             _homePosition = transform.position;
             _homeScale = transform.localScale;
@@ -105,11 +109,20 @@ namespace MyGame.Interaction
                 shape.SetCellSize(_grid.Board.cellSize);
                 shape.Build();
             }
+            else if (shape != null)
+            {
+                shape.Build();
+            }
+
+            // Re-apply the sequence colors AFTER the shape has been (re)built.
+            ReapplyPendingSpec();
 
             ResizeColliderToShape();
             SpawnGhost();
 
             if (_grid != null) _grid.OnBoardBuilt += HandleBoardRebuilt;
+
+            _initialized = true;
         }
 
         private void OnEnable()
@@ -138,14 +151,112 @@ namespace MyGame.Interaction
             else if (_snapping) UpdateSnap();
         }
 
-        private void LateUpdate()
+        #endregion
+
+        #region Public API
+
+        public void InitializeForPrefill(GridManager grid)
         {
-            // Safety net — if a snap is stuck (interrupted coroutine, timescale weirdness),
-            // force-complete it so CanDrag can return true on tray cubes and the placed
-            // cube doesn't sit half-animated forever.
-            if (_snapping && Time.time - _snapStartTime > SnapTimeoutSeconds)
+            if (_initialized) return;
+
+            _grid = grid;
+            _homePosition = transform.position;
+            _homeScale = transform.localScale;
+
+            if (shape != null && _grid != null && _grid.Board != null)
             {
-                FinishSnap();
+                shape.SetCellSize(_grid.Board.cellSize);
+                shape.Build();
+            }
+
+            ReapplyPendingSpec();
+
+            ResizeColliderToShape();
+            _initialized = true;
+        }
+
+        /// <summary>
+        /// Stores a sequence spec so colors can be re-applied after any future
+        /// shape.Build() (Initialize, board rebuild, etc.). Also applies it now.
+        /// </summary>
+        public void SetPendingSpec(TraySequence.CubeSpec spec, CubePalette resolvedPalette)
+        {
+            _pendingSpec = spec;
+            _pendingSpecPalette = resolvedPalette;
+            _hasPendingSpec = true;
+
+            ReapplyPendingSpec();
+        }
+
+        public void ClearPendingSpec()
+        {
+            _hasPendingSpec = false;
+            _pendingSpec = default;
+            _pendingSpecPalette = null;
+        }
+
+        public void PlaceImmediate(bool fireEvents = true, bool playPulse = false)
+        {
+            _dragging = false;
+            _snapping = false;
+            _pulseActive = false;
+
+            if (_ghost != null) _ghost.SetActive(false);
+
+            TryPlace(playPulse, fireEvents);
+        }
+
+        public void SetDraggable(bool value) => _canDrag = value;
+
+        public void CleanupForDestroy()
+        {
+            if (_occupiedCell.HasValue && _grid != null)
+            {
+                UnregisterSubCubes();
+                _grid.Release(_occupiedCell.Value, gameObject);
+                _occupiedCell = null;
+
+                OnRemovedFromBoard?.Invoke(this);
+            }
+
+            StopAllCoroutines();
+
+            if (_ghost != null)
+            {
+                Destroy(_ghost);
+                _ghost = null;
+            }
+        }
+
+        #endregion
+
+        #region Spec Application
+
+        private void ReapplyPendingSpec()
+        {
+            if (!_hasPendingSpec) return;
+            if (shape == null) return;
+
+            var palette = _pendingSpecPalette;
+            shape.SetPalette(palette);
+
+            // Apply colors after build
+            ApplySpecColors(shape, _pendingSpec.colors);
+        }
+
+        private static void ApplySpecColors(CubeShape targetShape, CubeColor[] colors)
+        {
+            if (targetShape == null) return;
+            if (colors == null || colors.Length == 0) return;
+
+            var blocks = targetShape.Blocks;
+            for (int i = 0; i < blocks.Count; i++)
+            {
+                var sub = blocks[i];
+                if (sub == null) continue;
+
+                int idx = Mathf.Min(i, colors.Length - 1);
+                sub.SetColor(colors[idx]);
             }
         }
 
@@ -217,8 +328,7 @@ namespace MyGame.Interaction
 
             transform.position = Vector3.SmoothDamp(
                 transform.position, target, ref _dragVelocity,
-                dragSmoothTime, Mathf.Infinity, Time.deltaTime
-            );
+                dragSmoothTime, Mathf.Infinity, Time.deltaTime);
 
             UpdateGhost();
         }
@@ -231,9 +341,7 @@ namespace MyGame.Interaction
         {
             _snapTargetPosition = targetPosition;
             _snapTargetScale = targetScale;
-            _snapStartTime = Time.time;
             _snapping = true;
-
             _snapVelocity = Vector3.zero;
             _scaleVelocity = Vector3.zero;
 
@@ -244,35 +352,30 @@ namespace MyGame.Interaction
         {
             transform.position = Vector3.SmoothDamp(
                 transform.position, _snapTargetPosition, ref _snapVelocity,
-                snapSmoothTime, Mathf.Infinity, Time.deltaTime
-            );
+                snapSmoothTime, Mathf.Infinity, Time.deltaTime);
 
             if (!_pulseActive)
             {
                 transform.localScale = Vector3.SmoothDamp(
                     transform.localScale, _snapTargetScale, ref _scaleVelocity,
-                    snapSmoothTime * 0.7f, Mathf.Infinity, Time.deltaTime
-                );
+                    snapSmoothTime * 0.7f, Mathf.Infinity, Time.deltaTime);
             }
 
-            float distSqr  = Vector3.SqrMagnitude(transform.position - _snapTargetPosition);
+            float distSqr = Vector3.SqrMagnitude(transform.position - _snapTargetPosition);
             float speedSqr = _snapVelocity.sqrMagnitude;
 
-            if (distSqr < 0.0001f && speedSqr < 0.0001f && !_pulseActive)
+            if (distSqr < 0.0001f && speedSqr < 0.0001f)
             {
-                FinishSnap();
+                transform.position = _snapTargetPosition;
+                _snapVelocity = Vector3.zero;
+
+                if (!_pulseActive)
+                {
+                    transform.localScale = _snapTargetScale;
+                    _scaleVelocity = Vector3.zero;
+                    _snapping = false;
+                }
             }
-        }
-
-        private void FinishSnap()
-        {
-            transform.position = _snapTargetPosition;
-            transform.localScale = _snapTargetScale;
-            _snapVelocity = Vector3.zero;
-            _scaleVelocity = Vector3.zero;
-
-            _pulseActive = false;
-            _snapping = false;
         }
 
         #endregion
@@ -289,37 +392,34 @@ namespace MyGame.Interaction
 
             while (t < landingPulseDuration)
             {
-                if (_dragging)
-                {
-                    _pulseActive = false;
-                    yield break;
-                }
+                if (_dragging) { _pulseActive = false; yield break; }
 
                 t += Time.deltaTime;
                 float k = Mathf.Clamp01(t / landingPulseDuration);
                 float bell = 1f - Mathf.Abs(k * 2f - 1f);
                 float squash = 1f - landingSquash * bell;
-                float bulge  = 1f + (1f - squash) * 0.5f;
+                float bulge = 1f + (1f - squash) * 0.5f;
 
                 transform.localScale = new Vector3(
                     baseScale.x * bulge,
                     baseScale.y * squash,
-                    baseScale.z * bulge
-                );
+                    baseScale.z * bulge);
 
                 yield return null;
             }
 
-            FinishSnap();
+            transform.position = _snapTargetPosition;
+            transform.localScale = baseScale;
+            _scaleVelocity = Vector3.zero;
+            _snapVelocity = Vector3.zero;
+            _pulseActive = false;
+            _snapping = false;
         }
 
         #endregion
 
         #region IDraggable
 
-        /// <summary>
-        /// Called only for tray cubes. Placed cubes return CanDrag = false, so DragController never calls this on them.
-        /// </summary>
         public void OnPickup(Vector3 worldHit)
         {
             StopAllCoroutines();
@@ -330,9 +430,13 @@ namespace MyGame.Interaction
             _dragging = true;
             _snapping = false;
             _dragVelocity = Vector3.zero;
+
             _dragTarget = transform.position;
 
             if (_ghost != null) _ghost.SetActive(true);
+
+            if (_occupiedCell.HasValue)
+                OnRemovedFromBoard?.Invoke(this);
         }
 
         public void OnDrag(Vector3 worldGroundPoint)
@@ -345,26 +449,69 @@ namespace MyGame.Interaction
             _dragging = false;
             if (_ghost != null) _ghost.SetActive(false);
 
-            Vector2Int grid = _grid.GetGridPosition(transform.position);
-            bool canPlace = _grid.CanPlaceAt(grid, gameObject);
+            TryPlace(playPulse: true, fireEvents: true);
+        }
 
-            if (canPlace && _grid.Occupy(grid, gameObject))
+        #endregion
+
+        #region Core Placement
+
+        private void TryPlace(bool playPulse, bool fireEvents)
+        {
+            if (_grid == null)
             {
-                _occupiedCell = grid;
-                PlacedFrame = Time.frameCount;
-
-                _homeScale = Vector3.one * (CurrentCellSize() * placedFitRatio);
-                _homePosition = GetSnapWorldPosition(grid, _homeScale);
-
-                RegisterSubCubes(grid);
-
-                OnPlacedOnBoard?.Invoke(this);
-                StartSnap(_homePosition, _homeScale, playLandingPulse: true);
+                ReturnHome();
                 return;
             }
 
-            // Illegal placement — return to tray spot
-            StartSnap(_homePosition, _homeScale, playLandingPulse: false);
+            Vector2Int grid = _grid.GetGridPosition(transform.position);
+            bool canPlace = _grid.CanPlaceAt(grid, gameObject);
+
+            if (canPlace)
+            {
+                if (_occupiedCell.HasValue)
+                {
+                    UnregisterSubCubes();
+                    _grid.Release(_occupiedCell.Value, gameObject);
+                }
+
+                if (_grid.Occupy(grid, gameObject))
+                {
+                    _occupiedCell = grid;
+                    _homeScale = Vector3.one * (CurrentCellSize() * placedFitRatio);
+                    _homePosition = GetSnapWorldPosition(grid, _homeScale);
+
+                    RegisterSubCubes(grid);
+
+                    if (fireEvents) OnPlacedOnBoard?.Invoke(this);
+
+                    if (playPulse)
+                    {
+                        StartSnap(_homePosition, _homeScale, true);
+                    }
+                    else
+                    {
+                        transform.position = _homePosition;
+                        transform.localScale = _homeScale;
+                        _snapping = false;
+                        _pulseActive = false;
+                    }
+
+                    return;
+                }
+            }
+
+            ReturnHome();
+        }
+
+        private void ReturnHome()
+        {
+            if (_snapping || _pulseActive) return;
+
+            transform.position = _homePosition;
+            transform.localScale = _homeScale;
+            _snapping = false;
+            _pulseActive = false;
         }
 
         #endregion
@@ -406,11 +553,16 @@ namespace MyGame.Interaction
         private void HandleBoardRebuilt(BoardDefinition def)
         {
             if (def == null) return;
+            if (IsPrefilled) return;
 
             if (shape != null)
             {
                 shape.SetCellSize(def.cellSize);
                 shape.Build();
+
+                // Re-apply sequence colors after the rebuild
+                ReapplyPendingSpec();
+
                 ResizeColliderToShape();
             }
 
@@ -424,30 +576,6 @@ namespace MyGame.Interaction
 
                 if (!_snapping && !_pulseActive)
                     StartSnap(_homePosition, _homeScale, playLandingPulse: false);
-            }
-        }
-
-        public void CleanupForDestroy()
-        {
-            // If we're on a cell, simulate the normal "removed from board" flow
-            // so subscribers release their references.
-            if (_occupiedCell.HasValue && _grid != null)
-            {
-                UnregisterSubCubes();
-                _grid.Release(_occupiedCell.Value, gameObject);
-                _occupiedCell = null;
-
-                OnRemovedFromBoard?.Invoke(this);
-            }
-
-            // Stop any running snap / pulse coroutines
-            StopAllCoroutines();
-
-            // Destroy the ghost preview if it still exists
-            if (_ghost != null)
-            {
-                Destroy(_ghost);
-                _ghost = null;
             }
         }
 

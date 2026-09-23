@@ -25,8 +25,14 @@ namespace MyGame.Levels
         [Min(0f)] public float respawnDelay = 0.15f;
 
         [Header("Goals")]
-        [Tooltip("Every goal must be complete to win the level. Empty = sandbox.")]
         public GoalDefinition[] goals;
+
+        [Header("Prefilled Cubes (on the board)")]
+        public PrefilledCube[] prefill;
+
+        [Header("Tray Sequence (shared)")]
+        [Tooltip("One ordered queue of cubes shared by all trays. Empty = trays spawn randomly.")]
+        public TraySequence traySequence;
 
         public bool HasBoard => board != null;
         public bool HasShapePool => shapePool != null;

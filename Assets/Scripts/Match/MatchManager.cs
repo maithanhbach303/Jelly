@@ -13,27 +13,59 @@ namespace MyGame.Match
 
         [Header("Detection")]
         [SerializeField] private int minMatchSize = 2;
-
-        [Tooltip("If true, runs the resolution cascade automatically on placement.")]
         [SerializeField] private bool autoResolve = true;
 
         [Header("Merge Animation")]
-        [Tooltip("The animator that handles the merge visual. Auto-created if empty.")]
         [SerializeField] private MergeAnimator mergeAnimator;
 
-        private readonly SubCubeMatchDetector _detector = new();
+        private SubCubeMatchDetector _detector;
         private SubCubeGrowthResolver _resolver;
+        private bool _initialized;
 
         public event System.Action<IReadOnlyList<MatchResult>> MatchesFound;
         public event System.Action<int> ResolveCompleted;
 
         private readonly HashSet<DraggableCube> _subscribed = new();
 
+        #region Lifecycle
+
         private void Awake()
         {
+            EnsureInitialized();
+        }
+
+        private void OnEnable()
+        {
+            // Ensure is safe to call multiple times.
+            EnsureInitialized();
+
+            if (grid != null)
+            {
+                grid.OnCubePlaced += HandleCubePlaced;
+                grid.OnCubeRemoved += HandleCubeRemoved;
+            }
+        }
+
+        private void OnDisable()
+        {
+            if (grid != null)
+            {
+                grid.OnCubePlaced -= HandleCubePlaced;
+                grid.OnCubeRemoved -= HandleCubeRemoved;
+            }
+            UnsubscribeAll();
+        }
+
+        /// <summary>
+        /// Lazily initializes internal state. Safe to call from anywhere, any number of times.
+        /// Needed because LevelLoader runs before this component's Awake (DefaultExecutionOrder).
+        /// </summary>
+        public void EnsureInitialized()
+        {
+            if (_initialized) return;
+
             if (grid == null) grid = FindFirstObjectByType<GridManager>();
 
-            // Animator — create one on this GameObject if none is assigned
             if (mergeAnimator == null)
             {
                 var go = new GameObject("MergeAnimator");
@@ -41,21 +73,13 @@ namespace MyGame.Match
                 mergeAnimator = go.AddComponent<MergeAnimator>();
             }
 
+            _detector = new SubCubeMatchDetector();
             _resolver = new SubCubeGrowthResolver { Animator = mergeAnimator };
+
+            _initialized = true;
         }
 
-        private void OnEnable()
-        {
-            if (grid != null) grid.OnCubePlaced += HandleCubePlaced;
-            if (grid != null) grid.OnCubeRemoved += HandleCubeRemoved;
-        }
-
-        private void OnDisable()
-        {
-            if (grid != null) grid.OnCubePlaced -= HandleCubePlaced;
-            if (grid != null) grid.OnCubeRemoved -= HandleCubeRemoved;
-            UnsubscribeAll();
-        }
+        #endregion
 
         #region Subscription
 
@@ -110,14 +134,20 @@ namespace MyGame.Match
         {
             if (cube == null) return;
 
+            EnsureInitialized();
+
+            if (grid == null)
+            {
+                Debug.LogWarning("[MatchManager] grid is null in HandleCubeFullyPlaced.");
+                return;
+            }
+
             var initial = _detector.FindMatches(grid, minMatchSize);
             if (initial.Count == 0) return;
 
             MatchesFound?.Invoke(initial);
 
             if (!autoResolve) return;
-
-            // Start the async resolve
             StartCoroutine(ResolveRoutine());
         }
 
@@ -136,6 +166,15 @@ namespace MyGame.Match
 
         public IEnumerator ResolveNowAsync(System.Action<int> onComplete = null)
         {
+            EnsureInitialized();
+
+            if (grid == null)
+            {
+                Debug.LogWarning("[MatchManager] ResolveNowAsync called with no grid.");
+                onComplete?.Invoke(0);
+                yield break;
+            }
+
             int removed = 0;
             yield return _resolver.ResolveAll(grid, minMatchSize, r => removed = r);
             onComplete?.Invoke(removed);

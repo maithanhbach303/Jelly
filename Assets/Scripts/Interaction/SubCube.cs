@@ -2,20 +2,12 @@ using UnityEngine;
 
 namespace MyGame.Interaction
 {
-    /// <summary>
-    /// Base behavior for a sub-cube inside a CubeShape.
-    /// Stores a CubeColor (identity used by match detection) and applies RGB via a palette.
-    /// Grows only along world axes because the slot pivot is always rotation-free.
-    /// </summary>
     public class SubCube : MonoBehaviour
     {
         #region Inspector
 
         [Header("Color")]
-        [Tooltip("Optional per-prefab palette. Overridden by the shape's palette at spawn.")]
         [SerializeField] private CubePalette palette;
-
-        [Tooltip("Fallback color used if nothing else assigns one.")]
         [SerializeField] private CubeColor startColor = CubeColor.None;
 
         [Header("Debug")]
@@ -29,15 +21,9 @@ namespace MyGame.Interaction
         [HideInInspector] public Vector2 SlotSize;
 
         public CubeShape Owner { get; private set; }
-
-        /// <summary>Current color identity — this is what match detection compares.</summary>
         public CubeColor CurrentColor { get; private set; } = CubeColor.None;
-
-        /// <summary>Rotation-free wrapper that carries this sub-cube's position and world-aligned scale.</summary>
-        public Transform SlotPivot { get; private set; }
-
         public CubePalette Palette => palette;
-        public CubeColor StartColor => startColor;
+        public Transform SlotPivot { get; private set; }
 
         private Renderer[] _renderers;
         private MaterialPropertyBlock _mpb;
@@ -53,14 +39,12 @@ namespace MyGame.Interaction
         {
             CacheRenderers();
             _mpb = new MaterialPropertyBlock();
-
-            // Ensure the slot pivot is rotation-free
-            if (transform.parent != null)
-                transform.parent.localRotation = Quaternion.identity;
         }
 
         private void Start()
         {
+            // Only apply fallback if nothing set a color first.
+            // CubeShape.Build and CubeTray both call SetColor before Start runs.
             if (CurrentColor == CubeColor.None)
                 SetColor(startColor);
         }
@@ -68,9 +52,6 @@ namespace MyGame.Interaction
         private void CacheRenderers()
         {
             _renderers = GetComponentsInChildren<Renderer>(includeInactive: true);
-
-            if (logColorChanges && _renderers.Length == 0)
-                Debug.LogWarning($"[SubCube {name}] No renderers found.", this);
         }
 
         #endregion
@@ -96,56 +77,13 @@ namespace MyGame.Interaction
             ApplyColor(color);
 
             if (logColorChanges)
-                Debug.Log($"[SubCube {name}] SetColor({color})", this);
+                Debug.Log($"[SubCube {name}] SetColor({color}), palette={(palette == null ? "NULL" : palette.name)}", this);
         }
 
         public void SetPalette(CubePalette p)
         {
             palette = p;
             if (CurrentColor != CubeColor.None) ApplyColor(CurrentColor);
-        }
-
-        #endregion
-
-        #region World-Aligned Growth
-
-        /// <summary>
-        /// Grow the sub-cube along a world-space direction by the given amount.
-        /// Only XZ components are used; Y is ignored (sub-cubes are flat on the board).
-        /// </summary>
-        public void GrowAlongWorld(Vector3 worldDir, float delta)
-        {
-            if (SlotPivot == null) return;
-
-            worldDir.y = 0f;
-            if (worldDir.sqrMagnitude < 0.0001f) return;
-            worldDir.Normalize();
-
-            Vector3 localDir = SlotPivot.InverseTransformDirection(worldDir);
-
-            var s = SlotPivot.localScale;
-            s.x += localDir.x * delta;
-            s.z += localDir.z * delta;
-            s.y = 1f;
-            SlotPivot.localScale = s;
-        }
-
-        public void GrowWorldRight(float delta)   => GrowAlongWorld(Vector3.right,   delta);
-        public void GrowWorldLeft(float delta)    => GrowAlongWorld(Vector3.left,    delta);
-        public void GrowWorldForward(float delta) => GrowAlongWorld(Vector3.forward, delta);
-        public void GrowWorldBack(float delta)    => GrowAlongWorld(Vector3.back,    delta);
-
-        public void ResetGrowth()
-        {
-            if (SlotPivot == null || Owner == null) return;
-
-            SlotPivot.localScale = Vector3.one;
-            float cs = Owner.CellSize;
-            SlotPivot.localPosition = new Vector3(
-                (SlotPosition.x - 0.5f) * cs,
-                0f,
-                (SlotPosition.y - 0.5f) * cs
-            );
         }
 
         #endregion

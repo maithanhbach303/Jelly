@@ -13,19 +13,23 @@ MonoBehaviour:
   m_Name: CubePalette_1
   m_EditorClassIdentifier: 
   entries:
-  - color: 1
-    rgb: {r: 0.95, g: 0.3, b: 0.3, a: 1}
-    material: {fileID: 0}
-    displayName: Red
-  - color: 2
-    rgb: {r: 0.3, g: 0.55, b: 0.95, a: 1}
-    material: {fileID: 0}
-    displayName: Blue
   - color: 3
     rgb: {r: 0.4, g: 0.85, b: 0.45, a: 1}
     material: {fileID: 0}
-    displayName: Green
+    displayName: 
   - color: 4
     rgb: {r: 0.98, g: 0.8, b: 0.25, a: 1}
     material: {fileID: 0}
-    displayName: Yellow
+    displayName: 
+  - color: 5
+    rgb: {r: 0.8, g: 0.5, b: 0.95, a: 1}
+    material: {fileID: 0}
+    displayName: 
+  - color: 7
+    rgb: {r: 0.35, g: 0.9, b: 0.95, a: 1}
+    material: {fileID: 0}
+    displayName: 
+  - color: 8
+    rgb: {r: 0.98, g: 0.55, b: 0.75, a: 1}
+    material: {fileID: 0}
+    displayName: 

@@ -10,19 +10,19 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: f4e2f7252cd0d8844bbbb7b829aae68d, type: 3}
-  m_Name: Level_2
+  m_Name: Level_1 1
   m_EditorClassIdentifier: 
-  levelName: Level 2
+  levelName: Level 1
   description: 
   thumbnail: {fileID: 0}
   difficulty: 1
   board: {fileID: 11400000, guid: a3e171cff2d512c4e83cab4e9e3126bc, type: 2}
-  shapePool: {fileID: 11400000, guid: 53a0e698d25b3984e9b495ee3c7b24e0, type: 2}
+  shapePool: {fileID: 11400000, guid: 6ae75ff0b80805c499173814dcd4b9b6, type: 2}
   palette: {fileID: 11400000, guid: b0d2d8e3e31e2c240ac8d0fe481af1dc, type: 2}
   minMatchSize: 2
   stockCount: -1
   respawnDelay: 0.15
   goals:
-  - {fileID: 11400000, guid: ac5a2fda5de2fa74dabbdcf9487b6a22, type: 2}
+  - {fileID: 11400000, guid: cdfb4de0769b2be4a86af1f44e68f1c8, type: 2}
   prefill: []
   traySequence: {fileID: 0}
