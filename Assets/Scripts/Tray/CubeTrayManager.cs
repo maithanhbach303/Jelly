@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using MyGame.Interaction;
 using MyGame.Levels;
+using MyGame.Board;
 
 namespace MyGame.Tray
 {
@@ -219,6 +220,20 @@ namespace MyGame.Tray
             for (int i = 0; i < trays.Count; i++)
                 if (trays[i] != null && trays[i].HasCube) result.Add(trays[i]);
             return result;
+        }
+
+        public bool AnyActiveCubeCanBePlaced(GridManager grid)
+        {
+            if (grid == null) return false;
+
+            for (int i = 0; i < trays.Count; i++)
+            {
+                var tray = trays[i];
+                if (tray == null || !tray.HasCube || tray.ActiveCube == null) continue;
+                if (grid.CanPlaceAnywhere(tray.ActiveCube)) return true;
+            }
+
+            return false;
         }
 
         #endregion

@@ -205,10 +205,35 @@ namespace MyGame.Board
         public bool CanPlaceAt(Vector2Int grid, GameObject ignore = null)
             => IsValidGridPosition(grid) && !IsOccupied(grid, ignore);
 
+        public bool CanPlaceAnywhere(GameObject cube, GameObject ignore = null)
+        {
+            if (board == null) return false;
+
+            foreach (var grid in board.EnumerateValidCells())
+                if (CanPlaceAt(grid, ignore != null ? ignore : cube))
+                    return true;
+
+            return false;
+        }
+
         public GameObject GetOccupant(Vector2Int grid)
             => _occupied.TryGetValue(grid, out var go) ? go : null;
 
         public int GetPlacedCubeCount() => _occupied.Count;
+
+        public bool IsBoardFull()
+        {
+            if (board == null) return false;
+
+            int validCells = 0;
+            foreach (var cell in board.EnumerateValidCells())
+            {
+                validCells++;
+                if (!IsOccupied(cell)) return false;
+            }
+
+            return validCells > 0;
+        }
 
         #endregion
 

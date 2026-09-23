@@ -5,6 +5,7 @@ using TMPro;
 using MyGame.Board;
 using MyGame.Interaction;
 using MyGame.Levels;
+using MyGame.Match;
 using MyGame.Tray;
 
 namespace MyGame.UI
@@ -18,6 +19,7 @@ namespace MyGame.UI
         [SerializeField] private LevelGoalSystem goalSystem;
         [SerializeField] private CubeTrayManager trayManager;
         [SerializeField] private GridManager gridManager;
+        [SerializeField] private MatchManager matchManager;
 
         [Header("HUD")]
         [SerializeField] private GameObject hudPanel;
@@ -49,6 +51,7 @@ namespace MyGame.UI
         private bool _subscribedLevel;
         private bool _subscribedGoals;
         private bool _subscribedTray;
+        private bool _subscribedMatch;
 
         #endregion
 
@@ -87,6 +90,7 @@ namespace MyGame.UI
             if (goalSystem == null)  goalSystem  = FindFirstObjectByType<LevelGoalSystem>();
             if (trayManager == null) trayManager = FindFirstObjectByType<CubeTrayManager>();
             if (gridManager == null) gridManager = FindFirstObjectByType<GridManager>();
+            if (matchManager == null) matchManager = FindFirstObjectByType<MatchManager>();
         }
 
         private void HookButtons()
@@ -120,8 +124,13 @@ namespace MyGame.UI
             if (!_subscribedTray && trayManager != null)
             {
                 trayManager.OnAnyCubeSpawned += HandleTraySpawned;
-                trayManager.OnAllTraysEmpty += HandleAllTraysEmpty;
                 _subscribedTray = true;
+            }
+
+            if (!_subscribedMatch && matchManager != null)
+            {
+                matchManager.ResolveCompleted += HandleResolveCompleted;
+                _subscribedMatch = true;
             }
         }
 
@@ -141,9 +150,12 @@ namespace MyGame.UI
             if (_subscribedTray && trayManager != null)
             {
                 trayManager.OnAnyCubeSpawned -= HandleTraySpawned;
-                trayManager.OnAllTraysEmpty -= HandleAllTraysEmpty;
             }
             _subscribedTray = false;
+
+            if (_subscribedMatch && matchManager != null)
+                matchManager.ResolveCompleted -= HandleResolveCompleted;
+            _subscribedMatch = false;
         }
 
         #endregion
@@ -177,10 +189,16 @@ namespace MyGame.UI
             RefreshTrayStock();
         }
 
-        private void HandleAllTraysEmpty()
+        private void HandleResolveCompleted(int removed)
         {
-            if (goalSystem != null && !goalSystem.AllGoalsComplete)
-                ShowLose();
+            CheckForNoMoves();
+        }
+
+        private void CheckForNoMoves()
+        {
+            if (goalSystem != null && goalSystem.AllGoalsComplete) return;
+            if (gridManager == null) return;
+            if (gridManager.IsBoardFull()) ShowLose();
         }
 
         #endregion

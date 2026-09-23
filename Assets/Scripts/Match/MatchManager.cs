@@ -143,11 +143,19 @@ namespace MyGame.Match
             }
 
             var initial = _detector.FindMatches(grid, minMatchSize);
-            if (initial.Count == 0) return;
+            if (initial.Count == 0)
+            {
+                ResolveCompleted?.Invoke(0);
+                return;
+            }
 
             MatchesFound?.Invoke(initial);
 
-            if (!autoResolve) return;
+            if (!autoResolve)
+            {
+                ResolveCompleted?.Invoke(0);
+                return;
+            }
             StartCoroutine(ResolveRoutine());
         }
 
